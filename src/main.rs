@@ -253,8 +253,9 @@ impl Generator {
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
 
-        let cargo_targets = self.project_targets();
-        let (mut targets, products, mut other_defs) = self.products_pbxproj(&cargo_targets, &cargo_dependency_id);
+        let targets = self.project_targets();
+        let has_static = targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static");
+        let (mut targets, products, mut other_defs) = self.products_pbxproj(&targets, &cargo_dependency_id);
 
         targets.push(XcodeObject {
             id: cargo_target_id.clone(),
@@ -284,8 +285,9 @@ impl Generator {
                         ProvisioningStyle = Automatic;
                     }};
                     ", o.id)).collect::<String>();
+        let mut folder_refs = Vec::new();
 
-        let static_libs_ref = if cargo_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static") {
+        if has_static {
             other_defs.push(XcodeObject {
                 id: "ADDEDBA66A6E1".to_owned(),
                 def: r#"
@@ -308,10 +310,13 @@ impl Generator {
                     sourceTree = "<group>";
                 };"#.to_owned(),
             });
-            "ADDEDBA66A6E2,"
-        } else {""};
+            folder_refs.push("ADDEDBA66A6E2".to_owned());
+        }
+
+        folder_refs.push(prod_group_id.clone());
 
         let objects = products.into_iter().chain(targets).chain(other_defs).map(|o| o.def).collect::<String>();
+        let folder_refs = folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
 
         let tpl = format!(r###"// !$*UTF8*$!
 {{
@@ -321,8 +326,7 @@ impl Generator {
         {main_group_id} = {{
             isa = PBXGroup;
             children = (
-                {static_libs_ref}
-                {prod_group_id}
+                {folder_refs}
             );
             sourceTree = "<group>";
         }};
@@ -412,8 +416,8 @@ impl Generator {
             project_id = project_id,
             main_group_id = main_group_id,
             prod_group_id = prod_group_id,
+            folder_refs = folder_refs,
             product_refs = product_refs,
-            static_libs_ref = static_libs_ref,
             objects = objects,
             target_attrs = target_attrs,
             target_refs = target_refs,
