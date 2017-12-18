@@ -1,6 +1,6 @@
-extern crate sha1;
 extern crate cargo_metadata;
 extern crate getopts;
+extern crate sha1;
 use getopts::Options;
 use std::env;
 use cargo_metadata::{Package, Target};
@@ -13,19 +13,23 @@ fn main() {
     let mut opts = Options::new();
     opts.optopt("", "manifest-path", "Rust project location", "Cargo.toml");
     let matches = match opts.parse(env::args().skip(1)) {
-        Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
+        Ok(m) => m,
+        Err(f) => panic!(f.to_string()),
     };
 
     let path = matches.opt_str("manifest-path").map(PathBuf::from);
 
     let meta = cargo_metadata::metadata(path.as_ref().map(|p| p.as_path())).unwrap();
 
-    let ok = meta.packages.into_iter().filter_map(filter_package).map(|p| {
-        let g = Generator::new(p);
-        let p = g.write_pbxproj().unwrap();
-        println!("Written {}", p.display());
-    }).count();
+    let ok = meta.packages
+        .into_iter()
+        .filter_map(filter_package)
+        .map(|p| {
+            let g = Generator::new(p);
+            let p = g.write_pbxproj().unwrap();
+            println!("Written {}", p.display());
+        })
+        .count();
 
     if ok == 0 {
         eprintln!(r#"No libraries with crate-type "staticlib" or "cdylib""#);
@@ -128,15 +132,16 @@ impl Generator {
         let mut products = Vec::new();
 
         for target in cargo_targets.iter() {
-            let prod_id = self.make_id(&target.file_type, &target.file_name);
-            let target_id = self.make_id(&target.file_type, &prod_id);
+            let prod_id = self.make_id(target.file_type, &target.file_name);
+            let target_id = self.make_id(target.file_type, &prod_id);
             let conf_list_id = self.make_id("<config-list>", &prod_id);
             let conf_release_id = self.make_id("<config-release>", &prod_id);
             let conf_debug_id = self.make_id("<config-debug>", &prod_id);
 
             targets.push(XcodeObject {
                 id: target_id.clone(),
-                def: format!(r##"{target_id} /* {kind} */ = {{
+                def: format!(
+                    r##"{target_id} /* {kind} */ = {{
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
@@ -151,20 +156,22 @@ impl Generator {
             productReference = {prod_id};
             productType = "{prod_type}";
         }};"##,
-                base_name = target.base_name,
-                prod_type = target.prod_type,
-                prod_id = prod_id,
-                file_name = target.file_name,
-                conf_list_id = conf_list_id,
-                kind = target.kind,
-                target_id = target_id,
-                cargo_dependency_id = cargo_dependency_id,
-                base_name_prefix = target.base_name_prefix,
-            )});
+                    base_name = target.base_name,
+                    prod_type = target.prod_type,
+                    prod_id = prod_id,
+                    file_name = target.file_name,
+                    conf_list_id = conf_list_id,
+                    kind = target.kind,
+                    target_id = target_id,
+                    cargo_dependency_id = cargo_dependency_id,
+                    base_name_prefix = target.base_name_prefix,
+                ),
+            });
 
             other.push(XcodeObject {
                 id: conf_list_id.to_owned(),
-                def: format!(r##"
+                def: format!(
+                    r##"
         {conf_list_id} /* {kind} */ = {{
             isa = XCConfigurationList;
             buildConfigurations = (
@@ -173,42 +180,51 @@ impl Generator {
             );
             defaultConfigurationIsVisible = 0;
             defaultConfigurationName = Release;
-        }};"##, conf_list_id = conf_list_id,
-                kind = target.kind,
-                conf_release_id = conf_release_id,
-                conf_debug_id = conf_debug_id,
-            )});
+        }};"##,
+                    conf_list_id = conf_list_id,
+                    kind = target.kind,
+                    conf_release_id = conf_release_id,
+                    conf_debug_id = conf_debug_id,
+                ),
+            });
 
             other.push(XcodeObject {
                 id: conf_release_id.to_owned(),
-                def: format!(r##"
+                def: format!(
+                    r##"
         {conf_release_id} /* {kind} */ = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
             }};
             name = Release;
-        }};"##, conf_release_id = conf_release_id,
-                kind = target.kind
-            )});
+        }};"##,
+                    conf_release_id = conf_release_id,
+                    kind = target.kind
+                ),
+            });
 
             other.push(XcodeObject {
                 id: conf_release_id.to_owned(),
-                def: format!(r##"
+                def: format!(
+                    r##"
         {conf_debug_id} /* {kind} */ = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
             }};
             name = Debug;
-        }};"##, conf_debug_id = conf_debug_id,
-                kind = target.kind
-            )});
+        }};"##,
+                    conf_debug_id = conf_debug_id,
+                    kind = target.kind
+                ),
+            });
 
             products.push(XcodeObject {
-            id: prod_id.to_owned(),
-            // path of product does not seem to work. Xcode writes it, but can't read it.
-            def: format!(r##"
+                id: prod_id.to_owned(),
+                // path of product does not seem to work. Xcode writes it, but can't read it.
+                def: format!(
+                    r##"
         {prod_id} /* {kind} */ = {{
             isa = PBXFileReference;
             explicitFileType = "{file_type}";
@@ -216,10 +232,12 @@ impl Generator {
             name = {file_name};
             sourceTree = BUILT_PRODUCTS_DIR;
         }};"##,
-            prod_id = prod_id,
-            kind = target.kind,
-            file_name = target.file_name,
-            file_type = target.file_type)});
+                    prod_id = prod_id,
+                    kind = target.kind,
+                    file_name = target.file_name,
+                    file_type = target.file_type
+                ),
+            });
         }
         (targets, products, other)
     }
@@ -240,7 +258,8 @@ impl Generator {
 
         targets.push(XcodeObject {
             id: cargo_target_id.clone(),
-            def: format!(r##"{cargo_target_id} = {{
+            def: format!(
+                r##"{cargo_target_id} = {{
             isa = PBXLegacyTarget;
             buildArgumentsString = "build $(CARGO_FLAGS)";
             buildConfigurationList = {conf_list_id};
@@ -253,8 +272,9 @@ impl Generator {
             productName = Cargo;
         }};
             "##,
-            cargo_target_id = cargo_target_id,
-            conf_list_id = conf_list_id)
+                cargo_target_id = cargo_target_id,
+                conf_list_id = conf_list_id
+            ),
         });
 
         let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
@@ -389,26 +409,26 @@ impl Generator {
     rootObject = {project_id};
 }}
     "###,
-    project_id = project_id,
-    main_group_id = main_group_id,
-    prod_group_id = prod_group_id,
-    product_refs = product_refs,
-    static_libs_ref = static_libs_ref,
-    objects = objects,
-    target_attrs = target_attrs,
-    target_refs = target_refs,
-    cargo_target_id = cargo_target_id,
-    cargo_dependency_id = cargo_dependency_id,
-    target_proxy_id = target_proxy_id,
-    conf_list_id = conf_list_id,
-    conf_debug_id = conf_debug_id,
-    conf_release_id = conf_release_id);
+            project_id = project_id,
+            main_group_id = main_group_id,
+            prod_group_id = prod_group_id,
+            product_refs = product_refs,
+            static_libs_ref = static_libs_ref,
+            objects = objects,
+            target_attrs = target_attrs,
+            target_refs = target_refs,
+            cargo_target_id = cargo_target_id,
+            cargo_dependency_id = cargo_dependency_id,
+            target_proxy_id = target_proxy_id,
+            conf_list_id = conf_list_id,
+            conf_debug_id = conf_debug_id,
+            conf_release_id = conf_release_id
+        );
 
         Ok(tpl)
     }
 
     fn prepare_project_path(&self) -> Result<PathBuf, io::Error> {
-
         let proj_path = Path::new(&self.package.manifest_path).with_file_name(format!("{}.xcodeproj", self.package.name));
         fs::create_dir_all(&proj_path)?;
         Ok(proj_path)
