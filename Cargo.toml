@@ -1,0 +1,17 @@
+[package]
+authors = ["Kornel <kornel@geekhood.net>"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins", "development-tools::build-utils"]
+description = "Make Xcode project files from Cargo projects"
+documentation = "https://gitlab.com/kornelski/cargo-xcode/blob/master/README.md#requirements"
+homepage = "https://gitlab.com/kornelski/cargo-xcode"
+keywords = ["cargo", "subcommand", "xcode", "project"]
+license = "MIT"
+name = "cargo-xcode"
+readme = "README.md"
+repository = "https://gitlab.com/kornelski/cargo-xcode.git"
+version = "0.1.0"
+
+[dependencies]
+cargo_metadata = "0.3.3"
+getopts = "0.2.15"
+sha1 = "0.3.0"
