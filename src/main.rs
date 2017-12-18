@@ -122,8 +122,8 @@ impl Generator {
         })).collect()
     }
 
-    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], cargo_dependency_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, String) {
-        let mut other = String::new();
+    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], cargo_dependency_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
+        let mut other = Vec::new();
         let mut targets = Vec::new();
         let mut products = Vec::new();
 
@@ -162,7 +162,9 @@ impl Generator {
                 base_name_prefix = target.base_name_prefix,
             )});
 
-            other.push_str(&format!(r##"
+            other.push(XcodeObject {
+                id: conf_list_id.to_owned(),
+                def: format!(r##"
         {conf_list_id} /* {kind} */ = {{
             isa = XCConfigurationList;
             buildConfigurations = (
@@ -171,29 +173,37 @@ impl Generator {
             );
             defaultConfigurationIsVisible = 0;
             defaultConfigurationName = Release;
-        }};
+        }};"##, conf_list_id = conf_list_id,
+                kind = target.kind,
+                conf_release_id = conf_release_id,
+                conf_debug_id = conf_debug_id,
+            )});
 
+            other.push(XcodeObject {
+                id: conf_release_id.to_owned(),
+                def: format!(r##"
         {conf_release_id} /* {kind} */ = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
             }};
             name = Release;
-        }};
+        }};"##, conf_release_id = conf_release_id,
+                kind = target.kind
+            )});
 
+            other.push(XcodeObject {
+                id: conf_release_id.to_owned(),
+                def: format!(r##"
         {conf_debug_id} /* {kind} */ = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
             }};
             name = Debug;
-        }};
-        "##,
-                conf_release_id = conf_release_id,
-                conf_debug_id = conf_debug_id,
-                conf_list_id = conf_list_id,
-                kind = target.kind,
-            ));
+        }};"##, conf_debug_id = conf_debug_id,
+                kind = target.kind
+            )});
 
             products.push(XcodeObject {
             id: prod_id.to_owned(),
@@ -226,7 +236,7 @@ impl Generator {
         let conf_debug_id = self.make_id("configuration", "Debug");
 
         let cargo_targets = self.project_targets();
-        let (mut targets, products, other_defs) = self.products_pbxproj(&cargo_targets, &cargo_dependency_id);
+        let (mut targets, products, mut other_defs) = self.products_pbxproj(&cargo_targets, &cargo_dependency_id);
 
         targets.push(XcodeObject {
             id: cargo_target_id.clone(),
@@ -242,9 +252,9 @@ impl Generator {
             passBuildSettingsInEnvironment = 1;
             productName = Cargo;
         }};
-"##,
-cargo_target_id = cargo_target_id,
-conf_list_id = conf_list_id)
+            "##,
+            cargo_target_id = cargo_target_id,
+            conf_list_id = conf_list_id)
         });
 
         let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
@@ -255,24 +265,33 @@ conf_list_id = conf_list_id)
                     }};
                     ", o.id)).collect::<String>();
 
-        let products = products.into_iter().map(|o| o.def).collect::<String>();
-        let targets = targets.into_iter().map(|o| o.def).collect::<String>();
+        let static_libs_ref = if cargo_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static") {
+            other_defs.push(XcodeObject {
+                id: "ADDEDBA66A6E1".to_owned(),
+                def: r#"
+                    /* Rust needs libresolv */
+                    ADDEDBA66A6E1 = {
+                        isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
+                        name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT;
+                    };
+                "#.to_owned(),
+            });
+            other_defs.push(XcodeObject {
+                id: "ADDEDBA66A6E2".to_owned(),
+                def: r#"
+                ADDEDBA66A6E2 = {
+                    isa = PBXGroup;
+                    children = (
+                        ADDEDBA66A6E1
+                    );
+                    name = "Required Libraries";
+                    sourceTree = "<group>";
+                };"#.to_owned(),
+            });
+            "ADDEDBA66A6E2,"
+        } else {""};
 
-        let (static_libs, static_libs_ref) = if cargo_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static") {
-            (r#"        /* Rust needs libresolv */
-        ADDEDBA66A6E1 = {
-            isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
-            name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT;
-        };
-        ADDEDBA66A6E2 = {
-            isa = PBXGroup;
-            children = (
-                ADDEDBA66A6E1
-            );
-            name = "Required Libraries";
-            sourceTree = "<group>";
-        };"#, "ADDEDBA66A6E2,")
-        } else {("","")};
+        let objects = products.into_iter().chain(targets).chain(other_defs).map(|o| o.def).collect::<String>();
 
         let tpl = format!(r###"// !$*UTF8*$!
 {{
@@ -288,14 +307,13 @@ conf_list_id = conf_list_id)
             sourceTree = "<group>";
         }};
 
-        {products}
-        {targets}
-        {other_defs}
+        {objects}
 
         {prod_group_id} = {{
             isa = PBXGroup;
             children = (
-                {product_refs}            );
+                {product_refs}
+            );
             name = Products;
             sourceTree = "<group>";
         }};
@@ -350,8 +368,6 @@ conf_list_id = conf_list_id)
             name = Debug;
         }};
 
-        {static_libs}
-
         {project_id} = {{
             isa = PBXProject;
             attributes = {{
@@ -377,11 +393,8 @@ conf_list_id = conf_list_id)
     main_group_id = main_group_id,
     prod_group_id = prod_group_id,
     product_refs = product_refs,
-    static_libs = static_libs,
     static_libs_ref = static_libs_ref,
-    products = products,
-    targets = targets,
-    other_defs = other_defs,
+    objects = objects,
     target_attrs = target_attrs,
     target_refs = target_refs,
     cargo_target_id = cargo_target_id,
