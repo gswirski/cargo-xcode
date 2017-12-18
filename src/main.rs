@@ -45,6 +45,20 @@ fn is_relevant_target(target: &Target) -> bool {
     target.kind.iter().any(|k| k == "bin" || k == "staticlib" || k == "cdylib")
 }
 
+struct XcodeTarget {
+    kind: String,
+    base_name: String,
+    file_name: String,
+    base_name_prefix: &'static str,
+    file_type: &'static str,
+    prod_type: &'static str,
+}
+
+struct XcodeObject {
+    id: String,
+    def: String,
+}
+
 struct Generator {
     id_base: sha1::Sha1,
     package: Package,
@@ -87,36 +101,42 @@ impl Generator {
         Ok(proj_path)
     }
 
-    fn products_pbxproj(&self, cargo_dependency_id: &str) -> (String, String, String, String, bool) {
-        let mut object_defs = String::new();
-        let mut product_refs = String::new();
-        let mut target_attrs = String::new();
-        let mut target_refs = String::new();
+    fn project_targets(&self) -> Vec<XcodeTarget> {
+        self.package.targets.iter().flat_map(|target| target.kind.iter().zip(std::iter::repeat(target.name.clone())).filter_map(|(kind, base_name)| {
+            let (base_name_prefix, file_name, file_type, prod_type) = match kind.as_str() {
+                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool"),
+                "cdylib" => ("lib", format!("lib{}.dylib", base_name), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic"),
+                "staticlib" => {
+                    ("", format!("lib{}.a", base_name), "archive.ar", "com.apple.product-type.library.static")
+                },
+                _ => return None,
+            };
 
-        let mut has_static = false;
+            Some(XcodeTarget {
+                kind: kind.to_owned(),
+                base_name,
+                base_name_prefix,
+                file_name, file_type,
+                prod_type,
+            })
+        })).collect()
+    }
 
-        for target in &self.package.targets {
-            for kind in &target.kind {
-                let (base_name_prefix, file_name, file_type, prod_type) = match kind.as_str() {
-                    "bin" => ("", target.name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool"),
-                    "cdylib" => ("lib", format!("lib{}.dylib", target.name), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic"),
-                    "staticlib" => {
-                        has_static = true;
-                        ("", format!("lib{}.a", target.name), "archive.ar", "com.apple.product-type.library.static")
-                    },
-                    _ => continue,
-                };
+    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], cargo_dependency_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, String) {
+        let mut other = String::new();
+        let mut targets = Vec::new();
+        let mut products = Vec::new();
 
-                let prod_id = self.make_id(&file_type, &file_name);
-                let target_id = self.make_id(&file_type, &prod_id);
-                let conf_list_id = self.make_id("<config-list>", &prod_id);
-                let conf_release_id = self.make_id("<config-release>", &prod_id);
-                let conf_debug_id = self.make_id("<config-debug>", &prod_id);
+        for target in cargo_targets.iter() {
+            let prod_id = self.make_id(&target.file_type, &target.file_name);
+            let target_id = self.make_id(&target.file_type, &prod_id);
+            let conf_list_id = self.make_id("<config-list>", &prod_id);
+            let conf_release_id = self.make_id("<config-release>", &prod_id);
+            let conf_debug_id = self.make_id("<config-debug>", &prod_id);
 
-                product_refs.push_str(&format!("{} /* {} */,\n", prod_id, kind));
-                target_refs.push_str(&format!("{} /* {} */,\n", target_id, kind));
-
-                object_defs.push_str(&format!(r##"{target_id} /* {kind} */ = {{
+            targets.push(XcodeObject {
+                id: target_id.clone(),
+                def: format!(r##"{target_id} /* {kind} */ = {{
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
@@ -130,8 +150,19 @@ impl Generator {
             productName = "{file_name}";
             productReference = {prod_id};
             productType = "{prod_type}";
-        }};
+        }};"##,
+                base_name = target.base_name,
+                prod_type = target.prod_type,
+                prod_id = prod_id,
+                file_name = target.file_name,
+                conf_list_id = conf_list_id,
+                kind = target.kind,
+                target_id = target_id,
+                cargo_dependency_id = cargo_dependency_id,
+                base_name_prefix = target.base_name_prefix,
+            )});
 
+            other.push_str(&format!(r##"
         {conf_list_id} /* {kind} */ = {{
             isa = XCConfigurationList;
             buildConfigurations = (
@@ -157,35 +188,30 @@ impl Generator {
             }};
             name = Debug;
         }};
+        "##,
+                conf_release_id = conf_release_id,
+                conf_debug_id = conf_debug_id,
+                conf_list_id = conf_list_id,
+                kind = target.kind,
+            ));
 
+            products.push(XcodeObject {
+            id: prod_id.to_owned(),
+            // path of product does not seem to work. Xcode writes it, but can't read it.
+            def: format!(r##"
         {prod_id} /* {kind} */ = {{
             isa = PBXFileReference;
             explicitFileType = "{file_type}";
             includeInIndex = 0;
             name = {file_name};
             sourceTree = BUILT_PRODUCTS_DIR;
-        }};"##, base_name = target.name,
-        conf_release_id = conf_release_id,
-        conf_debug_id = conf_debug_id,
-        conf_list_id = conf_list_id,
-        kind = kind, prod_id = prod_id,
-        prod_type = prod_type,
-        target_id = target_id,
-        cargo_dependency_id = cargo_dependency_id,
-        base_name_prefix = base_name_prefix,
-        file_name = file_name,
-        file_type = file_type));
-
-                // path of product does not seem to work. Xcode writes it, but can't read it.
-
-                target_attrs.push_str(&format!(r##"{target_id} /* {kind} */ = {{
-                        CreatedOnToolsVersion = 9.2;
-                        ProvisioningStyle = Automatic;
-                    }};
-"##, target_id = target_id, kind = kind));
-            }
+        }};"##,
+            prod_id = prod_id,
+            kind = target.kind,
+            file_name = target.file_name,
+            file_type = target.file_type)});
         }
-        (object_defs, product_refs, target_attrs, target_refs, has_static)
+        (targets, products, other)
     }
 
     pub fn pbxproj(&self) -> Result<String, Box<std::error::Error>> {
@@ -199,9 +225,40 @@ impl Generator {
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
 
-        let (products, product_refs, target_attrs, target_refs, has_static) = self.products_pbxproj(&cargo_dependency_id);
+        let cargo_targets = self.project_targets();
+        let (mut targets, products, other_defs) = self.products_pbxproj(&cargo_targets, &cargo_dependency_id);
 
-        let (static_libs, static_libs_ref) = if has_static {
+        targets.push(XcodeObject {
+            id: cargo_target_id.clone(),
+            def: format!(r##"{cargo_target_id} = {{
+            isa = PBXLegacyTarget;
+            buildArgumentsString = "build $(CARGO_FLAGS)";
+            buildConfigurationList = {conf_list_id};
+            buildPhases = (
+            );
+            buildToolPath = "$(HOME)/.cargo/bin/cargo";
+            buildWorkingDirectory = "$(SRCROOT)";
+            name = Cargo;
+            passBuildSettingsInEnvironment = 1;
+            productName = Cargo;
+        }};
+"##,
+cargo_target_id = cargo_target_id,
+conf_list_id = conf_list_id)
+        });
+
+        let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
+        let target_refs = targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
+        let target_attrs = targets.iter().map(|o| format!(r"{} = {{
+                        CreatedOnToolsVersion = 9.2;
+                        ProvisioningStyle = Automatic;
+                    }};
+                    ", o.id)).collect::<String>();
+
+        let products = products.into_iter().map(|o| o.def).collect::<String>();
+        let targets = targets.into_iter().map(|o| o.def).collect::<String>();
+
+        let (static_libs, static_libs_ref) = if cargo_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static") {
             (r#"        /* Rust needs libresolv */
         ADDEDBA66A6E1 = {
             isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
@@ -214,7 +271,7 @@ impl Generator {
             );
             name = "Required Libraries";
             sourceTree = "<group>";
-        };"#, "ADDEDBA66A6E2")
+        };"#, "ADDEDBA66A6E2,")
         } else {("","")};
 
         let tpl = format!(r###"// !$*UTF8*$!
@@ -225,13 +282,15 @@ impl Generator {
         {main_group_id} = {{
             isa = PBXGroup;
             children = (
-                {prod_group_id},
                 {static_libs_ref}
+                {prod_group_id}
             );
             sourceTree = "<group>";
         }};
 
         {products}
+        {targets}
+        {other_defs}
 
         {prod_group_id} = {{
             isa = PBXGroup;
@@ -239,19 +298,6 @@ impl Generator {
                 {product_refs}            );
             name = Products;
             sourceTree = "<group>";
-        }};
-
-        {cargo_target_id} = {{
-            isa = PBXLegacyTarget;
-            buildArgumentsString = "build $(CARGO_FLAGS)";
-            buildConfigurationList = {conf_list_id};
-            buildPhases = (
-            );
-            buildToolPath = "$(HOME)/.cargo/bin/cargo";
-            buildWorkingDirectory = "$(SRCROOT)";
-            name = Cargo;
-            passBuildSettingsInEnvironment = 1;
-            productName = Cargo;
         }};
 
         {target_proxy_id} = {{
@@ -321,7 +367,6 @@ impl Generator {
             projectRoot = "";
             targets = (
                 {target_refs}
-                {cargo_target_id}
             );
         }};
     }};
@@ -335,6 +380,8 @@ impl Generator {
     static_libs = static_libs,
     static_libs_ref = static_libs_ref,
     products = products,
+    targets = targets,
+    other_defs = other_defs,
     target_attrs = target_attrs,
     target_refs = target_refs,
     cargo_target_id = cargo_target_id,
