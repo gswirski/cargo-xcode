@@ -314,6 +314,7 @@ impl Generator {
                     {target_attrs}                }};
             }};
             buildConfigurationList = {conf_list_id};
+            compatibilityVersion = "Xcode 8.0";
             mainGroup = {main_group_id};
             productRefGroup = {prod_group_id};
             projectDirPath = "";
