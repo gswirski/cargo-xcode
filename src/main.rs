@@ -252,6 +252,7 @@ impl Generator {
         let conf_list_id = self.make_id("", "<configuration-list>");
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
+        let manifest_path_id = self.make_id("", "Cargo.toml");
 
         let targets = self.project_targets();
         let has_static = targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static");
@@ -286,6 +287,19 @@ impl Generator {
                     }};
                     ", o.id)).collect::<String>();
         let mut folder_refs = Vec::new();
+
+        folder_refs.push(manifest_path_id.clone());
+        other_defs.push(XcodeObject {
+            id: manifest_path_id.clone(),
+            def: format!(r#"
+                {manifest_path_id} /* Cargo.toml */ = {{
+                    isa = PBXFileReference;
+                    lastKnownFileType = "sourcecode.text-based-dylib-definition";
+                    fileEncoding = 4;
+                    path = Cargo.toml;
+                    sourceTree = "<group>";
+            }};"#, manifest_path_id = manifest_path_id),
+        });
 
         if has_static {
             other_defs.push(XcodeObject {
