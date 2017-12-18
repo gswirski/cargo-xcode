@@ -319,8 +319,8 @@ impl Generator {
             projectDirPath = "";
             projectRoot = "";
             targets = (
-                {cargo_target_id},
                 {target_refs}
+                {cargo_target_id}
             );
         }};
     }};
