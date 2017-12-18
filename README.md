@@ -4,8 +4,10 @@ Generates Xcode project files from `Cargo.toml` allowing use of Rust libraries i
 
 ## Requirements
 
- * Rust (tested with 1.23)
- * Xcode (tested with 9.2)
+ * [Rust](https://www.rust-lang.org/) (tested with 1.23)
+ * [Xcode](https://developer.apple.com/xcode/) (tested with 9.2)
+
+Once the Xcode project file is generated, `cargo-xcode` is no longer needed.
 
 ## Installation
 
@@ -36,6 +38,15 @@ This tool will generate Rust-specific project files for all binaries and C-compa
 5. In your parent project's target's **Build Phases**, in **Link Binary With Libraries** phase, you can now add Rust libraries from the workspace.
 
 6. If you're linking with *static* Rust libraries, also link your executables/libraries with `libresolv.dylib` (without it Xcode won't find `_res_9_init` required by Rust's stdlib).
+
+## Features
+
+It's better than just launching `cargo build` from a script:
+
+ * Configures Cargo to follow Xcode's Debug and Release configurations.
+ * Configures Cargo to use Xcode's standard build folder.
+ * Makes Xcode aware of dependencies and rebuild Rust code when needed.
+ * Supports Cargo workspaces and multiple targets per crate.
 
 ## Limitations
 
