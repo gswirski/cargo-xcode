@@ -56,6 +56,7 @@ struct XcodeTarget {
     base_name_prefix: &'static str,
     file_type: &'static str,
     prod_type: &'static str,
+    skip_install: bool,
 }
 
 struct XcodeObject {
@@ -107,11 +108,11 @@ impl Generator {
 
     fn project_targets(&self) -> Vec<XcodeTarget> {
         self.package.targets.iter().flat_map(|target| target.kind.iter().zip(std::iter::repeat(target.name.clone())).filter_map(|(kind, base_name)| {
-            let (base_name_prefix, file_name, file_type, prod_type) = match kind.as_str() {
-                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool"),
-                "cdylib" => ("lib", format!("lib{}.dylib", base_name), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic"),
+            let (base_name_prefix, file_name, file_type, prod_type, skip_install) = match kind.as_str() {
+                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool", false),
+                "cdylib" => ("lib", format!("lib{}.dylib", base_name), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
                 "staticlib" => {
-                    ("", format!("lib{}.a", base_name), "archive.ar", "com.apple.product-type.library.static")
+                    ("", format!("lib{}.a", base_name), "archive.ar", "com.apple.product-type.library.static", true)
                 },
                 _ => return None,
             };
@@ -122,6 +123,7 @@ impl Generator {
                 base_name_prefix,
                 file_name, file_type,
                 prod_type,
+                skip_install,
             })
         })).collect()
     }
@@ -188,6 +190,14 @@ impl Generator {
                 ),
             });
 
+            // Xcode tries to chmod it when archiving, even though it doesn't belong to the archive
+            let skip_install_flags = if target.skip_install {
+                r#"SKIP_INSTALL = YES;
+                INSTALL_GROUP = "";
+                INSTALL_MODE_FLAG = "";
+                INSTALL_OWNER = "";"#
+            } else {""};
+
             other.push(XcodeObject {
                 id: conf_release_id.to_owned(),
                 def: format!(
@@ -196,11 +206,13 @@ impl Generator {
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
+                {skip_install_flags}
             }};
             name = Release;
         }};"##,
                     conf_release_id = conf_release_id,
-                    kind = target.kind
+                    kind = target.kind,
+                    skip_install_flags = skip_install_flags
                 ),
             });
 
@@ -212,11 +224,13 @@ impl Generator {
             isa = XCBuildConfiguration;
             buildSettings = {{
                 PRODUCT_NAME = "$(TARGET_NAME)";
+                {skip_install_flags}
             }};
             name = Debug;
         }};"##,
                     conf_debug_id = conf_debug_id,
-                    kind = target.kind
+                    kind = target.kind,
+                    skip_install_flags = skip_install_flags
                 ),
             });
 
