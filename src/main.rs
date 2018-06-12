@@ -150,6 +150,7 @@ impl Generator {
             let conf_list_id = self.make_id("<config-list>", &prod_id);
             let conf_release_id = self.make_id("<config-release>", &prod_id);
             let conf_debug_id = self.make_id("<config-debug>", &prod_id);
+            let copy_script_id = self.make_id("<copy>", &prod_id);
 
             targets.push(XcodeObject {
                 id: target_id.clone(),
@@ -158,6 +159,7 @@ impl Generator {
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
+                {copy_script_id}
             );
             buildRules = (
             );
@@ -174,10 +176,40 @@ impl Generator {
                     prod_id = prod_id,
                     file_name = target.file_name,
                     conf_list_id = conf_list_id,
+                    copy_script_id = copy_script_id,
                     kind = target.kind,
                     target_id = target_id,
                     cargo_dependency_id = cargo_dependency_id,
                     base_name_prefix = target.base_name_prefix,
+                ),
+            });
+
+            other.push(XcodeObject {
+                id: copy_script_id.clone(),
+                def: format!(
+                    r##"{copy_script_id} = {{
+                    isa = PBXShellScriptBuildPhase;
+                    buildActionMask = 2147483647;
+                    name = "Copy files ({file_name})";
+                    files = (
+                    );
+                    inputFileListPaths = (
+                    );
+                    inputPaths = (
+                        "$(CARGO_XCODE_PRODUCTS_DIR)/{file_name}",
+                    );
+                    outputFileListPaths = (
+                    );
+                    outputPaths = (
+                        "$(BUILT_PRODUCTS_DIR)/{file_name}",
+                    );
+                    runOnlyForDeploymentPostprocessing = 0;
+                    shellPath = /bin/sh;
+                    shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/\"";
+                }};
+                "##,
+                    copy_script_id = copy_script_id,
+                    file_name = target.file_name
                 ),
             });
 
@@ -442,8 +474,8 @@ fi
         {conf_release_id} = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
-                CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/target/release"; /* hack for Cargo */
-                CARGO_TARGET_DIR = "$(BUILD_DIR)/target"; /* hack for Cargo */
+                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target"; /* for cargo */
+                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/release"; /* for xcode scripts */
                 CARGO_FLAGS = "--release";
                 ARCHS = "$(NATIVE_ARCH_ACTUAL)";
                 ONLY_ACTIVE_ARCH = YES;
@@ -455,8 +487,8 @@ fi
         {conf_debug_id} = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
-                CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/target/debug"; /* hack for Cargo */
-                CARGO_TARGET_DIR = "$(BUILD_DIR)/target"; /* hack for Cargo */
+                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target";
+                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/debug";
                 CARGO_FLAGS = "";
                 ARCHS = "$(NATIVE_ARCH_ACTUAL)";
                 ONLY_ACTIVE_ARCH = YES;
