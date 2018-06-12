@@ -4,8 +4,8 @@ Generates Xcode project files from `Cargo.toml` allowing use of Rust libraries i
 
 ## Requirements
 
- * [Rust](https://www.rust-lang.org/) (tested with 1.23)
- * [Xcode](https://developer.apple.com/xcode/) (tested with 9.2)
+ * [Rust](https://www.rust-lang.org/) (tested with 1.26)
+ * [Xcode](https://developer.apple.com/xcode/) (tested with 9.2 and 10.0b)
 
 Once the Xcode project file is generated, `cargo-xcode` is no longer needed.
 
@@ -46,10 +46,11 @@ It's better than just launching `cargo build` from a script:
  * Configures Cargo to follow Xcode's Debug and Release configurations.
  * Configures Cargo to use Xcode's standard build folder.
  * Makes Xcode aware of dependencies and rebuild Rust code when needed.
+ * Xcode's "Clean build folder" also cleans Cargo's target dir.
  * Supports Cargo workspaces and multiple targets per crate.
 
 ## Limitations
 
-Only Mac target is supported at the moment. Only native architecture (i.e. 64-bit Intel).
+Only 64-bit Intel Mac target is supported at the moment (i.e. no cross compilation).
 
-Rust binaries are exported as command-line tools. This tool intentionally does not make app bundles. If you want to build a Mac GUI app, create one as ObjC project in Xcode and run Rust code from a Rust static library.
+Rust binaries are exported as command-line tools. This tool intentionally does not make app bundles. If you want to build a Mac GUI app, create one as ObjC or Swift project in Xcode and run Rust code from a Rust static library.
