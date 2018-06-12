@@ -278,29 +278,63 @@ impl Generator {
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
         let manifest_path_id = self.make_id("", "Cargo.toml");
+        let aggregate_script_id = self.make_id("", "<cargo>sh");
 
-        let targets = self.project_targets();
-        let has_static = targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static");
-        let (mut targets, products, mut other_defs) = self.products_pbxproj(&targets, &cargo_dependency_id);
+        let rust_targets = self.project_targets();
+        let has_static = rust_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static");
+        let (mut targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &cargo_dependency_id);
 
         targets.push(XcodeObject {
             id: cargo_target_id.clone(),
             def: format!(
                 r##"{cargo_target_id} = {{
-            isa = PBXLegacyTarget;
-            buildArgumentsString = "build $(CARGO_FLAGS)";
+            isa = PBXAggregateTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
+                {aggregate_script_id}
             );
-            buildToolPath = "$(HOME)/.cargo/bin/cargo";
-            buildWorkingDirectory = "$(SRCROOT)";
+            dependencies = (
+            );
             name = Cargo;
-            passBuildSettingsInEnvironment = 1;
             productName = Cargo;
         }};
             "##,
                 cargo_target_id = cargo_target_id,
-                conf_list_id = conf_list_id
+                conf_list_id = conf_list_id,
+                aggregate_script_id = aggregate_script_id
+            ),
+        });
+
+        other_defs.push(XcodeObject {
+            id: aggregate_script_id.clone(),
+            def: format!(
+                r##"{aggregate_script_id} = {{
+                isa = PBXShellScriptBuildPhase;
+                buildActionMask = 2147483647;
+                name = "Cargo build";
+                files = (
+                );
+                inputFileListPaths = (
+                );
+                inputPaths = (
+                    "$(SRCROOT)/Cargo.toml"
+                );
+                outputFileListPaths = (
+                );
+                outputPaths = (
+                );
+                runOnlyForDeploymentPostprocessing = 0;
+                shellPath = /bin/bash;
+                shellScript = "set -e; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
+if [ \"$ACTION\" = \"clean\" ]; then
+    cargo clean;
+else
+    cargo build $CARGO_FLAGS;
+fi
+";
+        }};
+            "##,
+                aggregate_script_id = aggregate_script_id
             ),
         });
 
