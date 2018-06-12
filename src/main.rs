@@ -166,7 +166,7 @@ impl Generator {
             dependencies = (
                 {cargo_dependency_id}
             );
-            name = "{base_name_prefix}{base_name}";
+            name = "{base_name}-{kind}";
             productName = "{file_name}";
             productReference = {prod_id};
             productType = "{prod_type}";
@@ -180,7 +180,6 @@ impl Generator {
                     kind = target.kind,
                     target_id = target_id,
                     cargo_dependency_id = cargo_dependency_id,
-                    base_name_prefix = target.base_name_prefix,
                 ),
             });
 
@@ -241,41 +240,28 @@ impl Generator {
                 INSTALL_OWNER = "";"#
             } else {""};
 
-            other.push(XcodeObject {
-                id: conf_release_id.to_owned(),
-                def: format!(
-                    r##"
-        {conf_release_id} /* {kind} */ = {{
-            isa = XCBuildConfiguration;
-            buildSettings = {{
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                {skip_install_flags}
-            }};
-            name = Release;
-        }};"##,
-                    conf_release_id = conf_release_id,
-                    kind = target.kind,
-                    skip_install_flags = skip_install_flags
-                ),
-            });
-
-            other.push(XcodeObject {
-                id: conf_release_id.to_owned(),
-                def: format!(
-                    r##"
-        {conf_debug_id} /* {kind} */ = {{
-            isa = XCBuildConfiguration;
-            buildSettings = {{
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                {skip_install_flags}
-            }};
-            name = Debug;
-        }};"##,
-                    conf_debug_id = conf_debug_id,
-                    kind = target.kind,
-                    skip_install_flags = skip_install_flags
-                ),
-            });
+            other.extend([(conf_release_id, "Release"), (conf_debug_id, "Debug")].iter().map(|(id, name)| {
+                XcodeObject {
+                    id: id.to_owned(),
+                    def: format!(
+                        r##"
+            {id} /* {kind} */ = {{
+                isa = XCBuildConfiguration;
+                buildSettings = {{
+                    PRODUCT_NAME = "{base_name_prefix}{base_name}";
+                    {skip_install_flags}
+                }};
+                name = {name};
+            }};"##,
+                        name = name,
+                        id = id,
+                        kind = target.kind,
+                        base_name = target.base_name,
+                        base_name_prefix = target.base_name_prefix,
+                        skip_install_flags = skip_install_flags
+                    ),
+                }
+            }));
 
             products.push(XcodeObject {
                 id: prod_id.to_owned(),
