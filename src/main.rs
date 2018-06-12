@@ -8,18 +8,28 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::io;
 use std::io::Write;
+use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
     opts.optopt("", "manifest-path", "Rust project location", "Cargo.toml");
     let matches = match opts.parse(env::args().skip(1)) {
         Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
+        Err(f) => {
+            eprintln!("error: {}", f);
+            exit(1);
+        },
     };
 
     let path = matches.opt_str("manifest-path").map(PathBuf::from);
 
-    let meta = cargo_metadata::metadata(path.as_ref().map(|p| p.as_path())).unwrap();
+    let meta = match cargo_metadata::metadata(path.as_ref().map(|p| p.as_path())) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: Can't parse cargo metadata in {:?} because: {}", path, e);
+            exit(1);
+        },
+    };
 
     let ok = meta.packages
         .into_iter()
@@ -27,12 +37,13 @@ fn main() {
         .map(|p| {
             let g = Generator::new(p);
             let p = g.write_pbxproj().unwrap();
-            println!("Written {}", p.display());
+            println!("OK:\n{}", p.display());
         })
         .count();
 
     if ok == 0 {
-        eprintln!(r#"No libraries with crate-type "staticlib" or "cdylib""#);
+        eprintln!(r#"warning: No libraries with crate-type "staticlib" or "cdylib""#);
+        exit(1);
     }
 }
 
