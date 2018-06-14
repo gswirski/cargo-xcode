@@ -412,6 +412,7 @@ fi
                 ARCHS = "$(NATIVE_ARCH_ACTUAL)";
                 ONLY_ACTIVE_ARCH = YES;
                 SDKROOT = macosx;
+                PRODUCT_NAME = "{product_name}";
             }};
             name = Release;
         }};
@@ -425,6 +426,7 @@ fi
                 ARCHS = "$(NATIVE_ARCH_ACTUAL)";
                 ONLY_ACTIVE_ARCH = YES;
                 SDKROOT = macosx;
+                PRODUCT_NAME = "{product_name}";
             }};
             name = Debug;
         }};
@@ -450,6 +452,7 @@ fi
     rootObject = {project_id};
 }}
     "###,
+            product_name = self.package.name, // not really used, but Xcode demands it
             project_id = project_id,
             main_group_id = main_group_id,
             prod_group_id = prod_group_id,
