@@ -29,7 +29,7 @@ pub struct Generator {
 impl Generator {
     pub fn new(package: Package) -> Self {
         let mut id_base = sha1::Sha1::new();
-        id_base.update(package.id.as_bytes());
+        id_base.update(package.id.repr.as_bytes());
 
         Self {
             id_base,

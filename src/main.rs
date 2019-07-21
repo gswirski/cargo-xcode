@@ -5,7 +5,7 @@ extern crate sha1;
 use getopts::Options;
 use std::env;
 use cargo_metadata::{Package, Target};
-use std::path::PathBuf;
+
 use std::process::exit;
 
 fn main() {
@@ -19,9 +19,12 @@ fn main() {
         },
     };
 
-    let path = matches.opt_str("manifest-path").map(PathBuf::from);
-
-    let meta = match cargo_metadata::metadata(path.as_ref().map(|p| p.as_path())) {
+    let path = matches.opt_str("manifest-path");
+    let mut cmd = cargo_metadata::MetadataCommand::new();
+    if let Some(ref path) = path {
+        cmd.manifest_path(path);
+    }
+    let meta = match cmd.exec() {
         Ok(m) => m,
         Err(e) => {
             eprintln!("error: Can't parse cargo metadata in {:?} because: {}", path, e);
