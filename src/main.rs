@@ -1,7 +1,3 @@
-extern crate cargo_metadata;
-extern crate cargo_xcode;
-extern crate getopts;
-extern crate sha1;
 use getopts::Options;
 use std::env;
 use cargo_metadata::{Package, Target};

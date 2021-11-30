@@ -1,5 +1,3 @@
-extern crate cargo_metadata;
-extern crate sha1;
 use cargo_metadata::Package;
 use std::path::{Path, PathBuf};
 use std::fs;
