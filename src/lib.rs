@@ -7,9 +7,10 @@ use std::io::Write;
 struct XcodeTarget {
     kind: String,
     base_name: String,
-    file_name: String,
+    cargo_file_name: String,
+    xcode_product_name: String,
+    xcode_file_name: String,
     compiler_flags: String,
-    base_name_prefix: &'static str,
     file_type: &'static str,
     prod_type: &'static str,
     supported_platforms: &'static str,
@@ -64,36 +65,46 @@ impl Generator {
     }
 
     fn project_targets(&self) -> Vec<XcodeTarget> {
-        self.package.targets.iter().flat_map(|target| target.kind.iter().zip(std::iter::repeat(target.name.clone())).filter_map(|(kind, base_name)| {
-            let (base_name_prefix, file_name, file_type, prod_type, skip_install) = match kind.as_str() {
-                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
-                "cdylib" => ("lib", format!("lib{}.dylib", base_name.replace('-', "_")), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
+        self.package.targets.iter().flat_map(|target| {
+            let base_name = target.name.clone();
+            let required_features = target.required_features.join(",");
+            target.kind.iter().filter_map(move |kind| {
+            let (cargo_file_name, xcode_file_name, xcode_product_name, file_type, prod_type, skip_install) = match kind.as_str() {
+                "bin" => (base_name.clone(), base_name.clone(),  base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
+                "cdylib" => (format!("lib{}.dylib", base_name.replace('-', "_")), format!("{}.dylib", base_name), base_name.clone(), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
                 "staticlib" => {
-                    ("", format!("lib{}.a", base_name.replace('-', "_")), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
+                    // must have _static suffix to avoid build errors when dylib also exists
+                    (format!("lib{}.a", base_name.replace('-', "_")), format!("lib{}_static.a", base_name), format!("{}_static", base_name), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
                 },
                 _ => return None,
             };
 
+            let mut compiler_flags = if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE { format!("--bin {}", base_name) } else { "--lib".into() };
+            if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE && !required_features.is_empty() {
+                compiler_flags.push_str(&format!(" --features '{}'", required_features)); // Xcode escapes \=
+            }
+
             Some(XcodeTarget {
                 kind: kind.to_owned(),
-                compiler_flags: if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE { format!("--bin {}", base_name) } else { "--lib".into() },
+                compiler_flags,
                 supported_platforms: if prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE { "macosx iphonesimulator iphoneos appletvsimulator appletvos" } else { "macosx" },
-                base_name,
-                base_name_prefix,
-                file_name, file_type,
+                base_name: base_name.clone(),
+                cargo_file_name, xcode_file_name,
+                xcode_product_name,
+                file_type,
                 prod_type,
                 skip_install,
             })
-        })).collect()
+        })}).collect()
     }
 
-    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], manifest_path_id: &str, build_rule_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
+    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], manifest_path_id: &str, build_rule_id: &str, lipo_script_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
         let mut other = Vec::new();
         let mut targets = Vec::new();
         let mut products = Vec::new();
 
         for target in cargo_targets.iter() {
-            let prod_id = self.make_id(target.file_type, &target.file_name);
+            let prod_id = self.make_id(target.file_type, &target.cargo_file_name);
             let target_id = self.make_id(target.file_type, &prod_id);
             let conf_list_id = self.make_id("<config-list>", &prod_id);
             let conf_release_id = self.make_id("<config-release>", &prod_id);
@@ -108,7 +119,8 @@ impl Generator {
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
-                {compile_cargo_id}
+                {compile_cargo_id},
+                {lipo_script_id},
             );
             buildRules = (
                 {build_rule_id}
@@ -116,7 +128,7 @@ impl Generator {
             dependencies = (
             );
             name = "{base_name}-{kind}";
-            productName = "{file_name}";
+            productName = "{xcode_file_name}";
             productReference = {prod_id};
             productType = "{prod_type}";
         }};
@@ -124,9 +136,10 @@ impl Generator {
                     base_name = target.base_name,
                     prod_type = target.prod_type,
                     prod_id = prod_id,
-                    file_name = target.file_name,
+                    xcode_file_name = target.xcode_file_name,
                     conf_list_id = conf_list_id,
                     compile_cargo_id = compile_cargo_id,
+                    lipo_script_id = lipo_script_id,
                     build_rule_id = build_rule_id,
                     kind = target.kind,
                     target_id = target_id,
@@ -204,8 +217,8 @@ impl Generator {
             {id} /* {kind} */ = {{
                 isa = XCBuildConfiguration;
                 buildSettings = {{
-                    PRODUCT_NAME = "{base_name_prefix}{base_name}";
-                    "CARGO_XCODE_CARGO_FILE_NAME" = "{file_name}";
+                    PRODUCT_NAME = "{xcode_product_name}";
+                    "CARGO_XCODE_CARGO_FILE_NAME" = "{cargo_file_name}";
                     "CARGO_XCODE_CARGO_DEP_FILE_NAME" = "{dep_file_name}";
                     SUPPORTED_PLATFORMS = "{supported_platforms}";
                     {skip_install_flags}
@@ -215,10 +228,9 @@ impl Generator {
                     name = name,
                     id = id,
                     kind = target.kind,
-                    file_name = target.file_name,
-                    dep_file_name = Path::new(&target.file_name).with_extension("d").file_name().unwrap().to_str().unwrap(),
-                    base_name = target.base_name,
-                    base_name_prefix = target.base_name_prefix,
+                    cargo_file_name = target.cargo_file_name,
+                    dep_file_name = Path::new(&target.cargo_file_name).with_extension("d").file_name().unwrap().to_str().unwrap(),
+                    xcode_product_name = target.xcode_product_name,
                     supported_platforms = target.supported_platforms,
                     skip_install_flags = skip_install_flags
                 ),
@@ -233,12 +245,12 @@ impl Generator {
             isa = PBXFileReference;
             explicitFileType = "{file_type}";
             includeInIndex = 0;
-            name = {file_name};
+            name = "{xcode_file_name}";
             sourceTree = BUILT_PRODUCTS_DIR;
         }};"##,
                     prod_id = prod_id,
                     kind = target.kind,
-                    file_name = target.file_name,
+                    xcode_file_name = target.xcode_file_name,
                     file_type = target.file_type
                 ),
             });
@@ -251,6 +263,7 @@ impl Generator {
         let prod_group_id = self.make_id("", "Products");
         let project_id = self.make_id("", "<project>");
         let build_rule_id = self.make_id("", "BuildRule");
+        let lipo_script_id = self.make_id("", "LipoScript");
         let conf_list_id = self.make_id("", "<configuration-list>");
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
@@ -258,8 +271,7 @@ impl Generator {
 
         let rust_targets = self.project_targets();
         let has_static = rust_targets.iter().any(|t| t.prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE);
-        let (targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id);
-
+        let (targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id, &lipo_script_id);
 
         let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
         let target_refs = targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
@@ -346,27 +358,38 @@ if [ "$ACTION" = clean ]; then
  echo cargo clean ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
  cargo clean ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
 else
- echo cargo build ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
- cargo build ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
+ echo cargo build --features="${CARGO_XCODE_FEATURES:-}" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
+ cargo build --features="${CARGO_XCODE_FEATURES:-}" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
 fi
 # it's too hard to explain Cargo's actual exe path to Xcode build graph, so hardlink to a known-good path instead
 BUILT_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}"
-BUILD_DST="${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+BUILD_DST="${BUILT_PRODUCTS_DIR}/${CARGO_XCODE_TARGET_ARCH}-${EXECUTABLE_NAME}"
+# must match outputFiles
 ln -f -- "$BUILT_SRC" "$BUILD_DST"
 
 # xcode generates dep file, but for its own path, so append our rename to it
 DEP_FILE_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_DEP_FILE_NAME}"
 if [ -f "$DEP_FILE_SRC" ]; then
-    DEP_FILE_DST="${BUILT_PRODUCTS_DIR}/${EXECUTABLE_NAME}.d"
+    DEP_FILE_DST="${DERIVED_FILE_DIR}/${CARGO_XCODE_TARGET_ARCH}-${EXECUTABLE_NAME}.d"
     cp -f "$DEP_FILE_SRC" "$DEP_FILE_DST"
     echo >> "$DEP_FILE_DST" "$BUILD_DST: $BUILT_SRC"
+fi
+
+# lipo script needs to know all the platform-specific files that have been built
+# archs is in the file name, so that paths don't stay around after archs change
+# must match input for LipoScript
+FILE_LIST="${DERIVED_FILE_DIR}/${ARCHS}-${EXECUTABLE_NAME}.xcfilelist"
+touch "$FILE_LIST"
+if ! egrep -q "$BUILD_DST" "$FILE_LIST" ; then
+    echo >> "$FILE_LIST" "$BUILD_DST"
 fi
 "##.escape_default();
 
         let common_build_settings = format!(r##"
             ALWAYS_SEARCH_USER_PATHS = NO;
             SUPPORTS_MACCATALYST = YES;
-            CARGO_TARGET_DIR = "$(TARGET_TEMP_DIR)/cargo-target"; /* for cargo */
+            CARGO_TARGET_DIR = "$(PROJECT_TEMP_DIR)/cargo_target"; /* for cargo */
+            CARGO_XCODE_FEATURES = ""; /* configure yourself */
             "CARGO_XCODE_TARGET_ARCH[arch=arm64*]" = "aarch64";
             "CARGO_XCODE_TARGET_ARCH[arch=x86_64*]" = "x86_64"; /* catalyst adds h suffix */
             "CARGO_XCODE_TARGET_ARCH[arch=i386]" = "i686";
@@ -384,22 +407,41 @@ fi
         let tpl = format!(
             r###"// !$*UTF8*$!
 {{
+    /* generated with cargo-xcode {crate_version} */
     archiveVersion = 1;
     objectVersion = 55;
     objects = {{
         {build_rule_id} = {{
             isa = PBXBuildRule;
             compilerSpec = com.apple.compilers.proxy.script;
-            dependencyFile = "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_NAME).d";
+            dependencyFile = "$(DERIVED_FILE_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME).d";
             name = "Cargo project build";
             filePatterns = "*/Cargo.toml"; /* must contain asterisk */
             fileType = pattern.proxy;
             inputFiles = ();
             isEditable = 1;
             outputFiles = (
-                "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
+                "$(BUILT_PRODUCTS_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME)",
             );
             script = "{build_script}";
+        }};
+
+        {lipo_script_id} /* LipoScript */ = {{
+            name = "Universal Binary lipo";
+            isa = PBXShellScriptBuildPhase;
+            buildActionMask = 2147483647;
+            files = ();
+            inputFileListPaths = ();
+            inputPaths = (
+                "$(DERIVED_FILE_DIR)/$(ARCHS)-$(EXECUTABLE_NAME).xcfilelist",
+            );
+            outputFileListPaths = ();
+            outputPaths = (
+                "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)"
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/sh;
+            shellScript = "set -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$BUILT_PRODUCTS_DIR/$EXECUTABLE_PATH\"";
         }};
 
         {main_group_id} = {{
@@ -471,8 +513,10 @@ fi
     rootObject = {project_id};
 }}
     "###,
+            crate_version = env!("CARGO_PKG_VERSION"),
             project_id = project_id,
             build_rule_id = build_rule_id,
+            lipo_script_id = lipo_script_id,
             build_script = build_script,
             main_group_id = main_group_id,
             prod_group_id = prod_group_id,
