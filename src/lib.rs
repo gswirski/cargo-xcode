@@ -130,6 +130,7 @@ impl Generator {
                 ),
             });
 
+            // EXECUTABLE_PATH is relative, e.g. "MyApp.app/Contents/MacOS/MyApp"
             other.push(XcodeObject {
                 id: copy_script_id.clone(),
                 def: format!(
@@ -144,14 +145,13 @@ impl Generator {
 					inputPaths = (
 						"$(CARGO_XCODE_PRODUCTS_DIR)/{file_name}",
 					);
-					outputFileListPaths = (
-					);
+					outputFileListPaths = ();
 					outputPaths = (
-						"$(BUILT_PRODUCTS_DIR)/{file_name}",
+						"$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
 					);
 					runOnlyForDeploymentPostprocessing = 0;
 					shellPath = /bin/sh;
-					shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/\"";
+					shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/${{EXECUTABLE_PATH}}\"";
 				}};
 				"##,
                     copy_script_id = copy_script_id,
