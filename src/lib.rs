@@ -24,6 +24,8 @@ pub struct Generator {
     package: Package,
 }
 
+const STATIC_LIB_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.library.static";
+
 impl Generator {
     pub fn new(package: Package) -> Self {
         let mut id_base = sha1::Sha1::new();
@@ -65,9 +67,9 @@ impl Generator {
         self.package.targets.iter().flat_map(|target| target.kind.iter().zip(std::iter::repeat(target.name.clone())).filter_map(|(kind, base_name)| {
             let (base_name_prefix, file_name, file_type, prod_type, skip_install) = match kind.as_str() {
                 "bin" => ("", base_name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool", false),
-                "cdylib" => ("lib", format!("lib{}.dylib", base_name), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
+                "cdylib" => ("lib", format!("lib{}.dylib", base_name.replace('-', "_")), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
                 "staticlib" => {
-                    ("", format!("lib{}.a", base_name), "archive.ar", "com.apple.product-type.library.static", true)
+                    ("", format!("lib{}.a", base_name.replace('-', "_")), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
                 },
                 _ => return None,
             };
@@ -244,7 +246,7 @@ impl Generator {
         let aggregate_script_id = self.make_id("", "<cargo>sh");
 
         let rust_targets = self.project_targets();
-        let has_static = rust_targets.iter().any(|t| t.prod_type == "com.apple.product-type.library.static");
+        let has_static = rust_targets.iter().any(|t| t.prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE);
         let (mut targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &cargo_dependency_id);
 
         targets.push(XcodeObject {

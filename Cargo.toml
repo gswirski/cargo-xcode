@@ -12,6 +12,9 @@ repository = "https://gitlab.com/kornelski/cargo-xcode"
 version = "1.1.4"
 edition = "2018"
 
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
 [dependencies]
 cargo_metadata = "0.14.1"
 getopts = "0.2.21"
