@@ -206,6 +206,7 @@ impl Generator {
                 buildSettings = {{
                     PRODUCT_NAME = "{base_name_prefix}{base_name}";
                     "CARGO_XCODE_CARGO_FILE_NAME" = "{file_name}";
+                    "CARGO_XCODE_CARGO_DEP_FILE_NAME" = "{dep_file_name}";
                     SUPPORTED_PLATFORMS = "{supported_platforms}";
                     {skip_install_flags}
                 }};
@@ -215,6 +216,7 @@ impl Generator {
                     id = id,
                     kind = target.kind,
                     file_name = target.file_name,
+                    dep_file_name = Path::new(&target.file_name).with_extension("d").file_name().unwrap().to_str().unwrap(),
                     base_name = target.base_name,
                     base_name_prefix = target.base_name_prefix,
                     supported_platforms = target.supported_platforms,
@@ -341,13 +343,24 @@ if ! rustup target list --installed | egrep -q "${CARGO_XCODE_TARGET_TRIPLE}"; t
     rustup target add "${CARGO_XCODE_TARGET_TRIPLE}" || echo >&2 "warning: can't install $CARGO_XCODE_TARGET_TRIPLE"
 fi
 if [ "$ACTION" = clean ]; then
- set -x;
+ echo cargo clean ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
  cargo clean ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
 else
- set -x;
+ echo cargo build ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
  cargo build ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
 fi
-ln -f -- "${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}" "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+# it's too hard to explain Cargo's actual exe path to Xcode build graph, so hardlink to a known-good path instead
+BUILT_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}"
+BUILD_DST="${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+ln -f -- "$BUILT_SRC" "$BUILD_DST"
+
+# xcode generates dep file, but for its own path, so append our rename to it
+DEP_FILE_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_DEP_FILE_NAME}"
+if [ -f "$DEP_FILE_SRC" ]; then
+    DEP_FILE_DST="${BUILT_PRODUCTS_DIR}/${EXECUTABLE_NAME}.d"
+    cp -f "$DEP_FILE_SRC" "$DEP_FILE_DST"
+    echo >> "$DEP_FILE_DST" "$BUILD_DST: $BUILT_SRC"
+fi
 "##.escape_default();
 
         let common_build_settings = format!(r##"
@@ -377,6 +390,7 @@ ln -f -- "${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_M
         {build_rule_id} = {{
             isa = PBXBuildRule;
             compilerSpec = com.apple.compilers.proxy.script;
+            dependencyFile = "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_NAME).d";
             name = "Cargo project build";
             filePatterns = "*/Cargo.toml"; /* must contain asterisk */
             fileType = pattern.proxy;
