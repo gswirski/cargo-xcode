@@ -25,6 +25,7 @@ pub struct Generator {
 }
 
 const STATIC_LIB_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.library.static";
+const EXECUTABLE_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.tool";
 
 impl Generator {
     pub fn new(package: Package) -> Self {
@@ -63,7 +64,7 @@ impl Generator {
     fn project_targets(&self) -> Vec<XcodeTarget> {
         self.package.targets.iter().flat_map(|target| target.kind.iter().zip(std::iter::repeat(target.name.clone())).filter_map(|(kind, base_name)| {
             let (base_name_prefix, file_name, file_type, prod_type, skip_install) = match kind.as_str() {
-                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", "com.apple.product-type.tool", false),
+                "bin" => ("", base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
                 "cdylib" => ("lib", format!("lib{}.dylib", base_name.replace('-', "_")), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
                 "staticlib" => {
                     ("", format!("lib{}.a", base_name.replace('-', "_")), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
@@ -152,7 +153,7 @@ impl Generator {
                 }};
                 "##,
                     copy_script_id = copy_script_id,
-                    file_name = target.file_name
+                    file_name = target.file_name,
                 ),
             });
 
@@ -324,7 +325,7 @@ fi
                 r#"
                 {manifest_path_id} /* Cargo.toml */ = {{
                     isa = PBXFileReference;
-                    lastKnownFileType = "sourcecode.text-based-dylib-definition";
+                    lastKnownFileType = text;
                     fileEncoding = 4;
                     path = Cargo.toml;
                     sourceTree = "<group>";
@@ -368,7 +369,7 @@ fi
             r###"// !$*UTF8*$!
 {{
     archiveVersion = 1;
-    objectVersion = 42;
+    objectVersion = 55;
     objects = {{
         {main_group_id} = {{
             isa = PBXGroup;
