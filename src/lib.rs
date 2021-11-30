@@ -31,10 +31,7 @@ impl Generator {
         let mut id_base = sha1::Sha1::new();
         id_base.update(package.id.repr.as_bytes());
 
-        Self {
-            id_base,
-            package,
-        }
+        Self { id_base, package }
     }
 
     fn make_id(&self, kind: &str, name: &str) -> String {
@@ -102,22 +99,22 @@ impl Generator {
                 id: target_id.clone(),
                 def: format!(
                     r##"{target_id} /* {base_name}-{kind} */ = {{
-			isa = PBXNativeTarget;
-			buildConfigurationList = {conf_list_id};
-			buildPhases = (
-				{copy_script_id}
-			);
-			buildRules = (
-			);
-			dependencies = (
-				{cargo_dependency_id}
-			);
-			name = "{base_name}-{kind}";
-			productName = "{file_name}";
-			productReference = {prod_id};
-			productType = "{prod_type}";
-		}};
-		"##,
+            isa = PBXNativeTarget;
+            buildConfigurationList = {conf_list_id};
+            buildPhases = (
+                {copy_script_id}
+            );
+            buildRules = (
+            );
+            dependencies = (
+                {cargo_dependency_id}
+            );
+            name = "{base_name}-{kind}";
+            productName = "{file_name}";
+            productReference = {prod_id};
+            productType = "{prod_type}";
+        }};
+        "##,
                     base_name = target.base_name,
                     prod_type = target.prod_type,
                     prod_id = prod_id,
@@ -135,25 +132,25 @@ impl Generator {
                 id: copy_script_id.clone(),
                 def: format!(
                     r##"{copy_script_id} = {{
-					isa = PBXShellScriptBuildPhase;
-					buildActionMask = 2147483647;
-					name = "Copy files ({file_name})";
-					files = (
-					);
-					inputFileListPaths = (
-					);
-					inputPaths = (
-						"$(CARGO_XCODE_PRODUCTS_DIR)/{file_name}",
-					);
-					outputFileListPaths = ();
-					outputPaths = (
-						"$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
-					);
-					runOnlyForDeploymentPostprocessing = 0;
-					shellPath = /bin/sh;
-					shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/${{EXECUTABLE_PATH}}\"";
-				}};
-				"##,
+                    isa = PBXShellScriptBuildPhase;
+                    buildActionMask = 2147483647;
+                    name = "Copy files ({file_name})";
+                    files = (
+                    );
+                    inputFileListPaths = (
+                    );
+                    inputPaths = (
+                        "$(CARGO_XCODE_PRODUCTS_DIR)/{file_name}",
+                    );
+                    outputFileListPaths = ();
+                    outputPaths = (
+                        "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
+                    );
+                    runOnlyForDeploymentPostprocessing = 0;
+                    shellPath = /bin/sh;
+                    shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/${{EXECUTABLE_PATH}}\"";
+                }};
+                "##,
                     copy_script_id = copy_script_id,
                     file_name = target.file_name
                 ),
@@ -163,15 +160,15 @@ impl Generator {
                 id: conf_list_id.to_owned(),
                 def: format!(
                     r##"
-		{conf_list_id} /* {kind} */ = {{
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				{conf_release_id} /* Release */,
-				{conf_debug_id} /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		}};"##,
+        {conf_list_id} /* {kind} */ = {{
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                {conf_release_id} /* Release */,
+                {conf_debug_id} /* Debug */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        }};"##,
                     conf_list_id = conf_list_id,
                     kind = target.kind,
                     conf_release_id = conf_release_id,
@@ -182,9 +179,9 @@ impl Generator {
             // Xcode tries to chmod it when archiving, even though it doesn't belong to the archive
             let skip_install_flags = if target.skip_install {
                 r#"SKIP_INSTALL = YES;
-				INSTALL_GROUP = "";
-				INSTALL_MODE_FLAG = "";
-				INSTALL_OWNER = "";"#
+                INSTALL_GROUP = "";
+                INSTALL_MODE_FLAG = "";
+                INSTALL_OWNER = "";"#
             } else {
                 ""
             };
@@ -193,14 +190,14 @@ impl Generator {
                 id: id.to_owned(),
                 def: format!(
                     r##"
-			{id} /* {kind} */ = {{
-				isa = XCBuildConfiguration;
-				buildSettings = {{
-					PRODUCT_NAME = "{base_name_prefix}{base_name}";
-					{skip_install_flags}
-				}};
-				name = {name};
-			}};"##,
+            {id} /* {kind} */ = {{
+                isa = XCBuildConfiguration;
+                buildSettings = {{
+                    PRODUCT_NAME = "{base_name_prefix}{base_name}";
+                    {skip_install_flags}
+                }};
+                name = {name};
+            }};"##,
                     name = name,
                     id = id,
                     kind = target.kind,
@@ -215,13 +212,13 @@ impl Generator {
                 // path of product does not seem to work. Xcode writes it, but can't read it.
                 def: format!(
                     r##"
-		{prod_id} /* {kind} */ = {{
-			isa = PBXFileReference;
-			explicitFileType = "{file_type}";
-			includeInIndex = 0;
-			name = {file_name};
-			sourceTree = BUILT_PRODUCTS_DIR;
-		}};"##,
+        {prod_id} /* {kind} */ = {{
+            isa = PBXFileReference;
+            explicitFileType = "{file_type}";
+            includeInIndex = 0;
+            name = {file_name};
+            sourceTree = BUILT_PRODUCTS_DIR;
+        }};"##,
                     prod_id = prod_id,
                     kind = target.kind,
                     file_name = target.file_name,
@@ -253,17 +250,17 @@ impl Generator {
             id: cargo_target_id.clone(),
             def: format!(
                 r##"{cargo_target_id} = {{
-			isa = PBXAggregateTarget;
-			buildConfigurationList = {conf_list_id};
-			buildPhases = (
-				{aggregate_script_id}
-			);
-			dependencies = (
-			);
-			name = Cargo;
-			productName = Cargo;
-		}};
-			"##,
+            isa = PBXAggregateTarget;
+            buildConfigurationList = {conf_list_id};
+            buildPhases = (
+                {aggregate_script_id}
+            );
+            dependencies = (
+            );
+            name = Cargo;
+            productName = Cargo;
+        }};
+            "##,
                 cargo_target_id = cargo_target_id,
                 conf_list_id = conf_list_id,
                 aggregate_script_id = aggregate_script_id
@@ -274,31 +271,31 @@ impl Generator {
             id: aggregate_script_id.clone(),
             def: format!(
                 r##"{aggregate_script_id} = {{
-				isa = PBXShellScriptBuildPhase;
-				buildActionMask = 2147483647;
-				name = "Cargo build";
-				files = (
-				);
-				inputFileListPaths = (
-				);
-				inputPaths = (
-					"$(SRCROOT)/Cargo.toml"
-				);
-				outputFileListPaths = (
-				);
-				outputPaths = (
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-				shellPath = /bin/bash;
-				shellScript = "set -e; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
+                isa = PBXShellScriptBuildPhase;
+                buildActionMask = 2147483647;
+                name = "Cargo build";
+                files = (
+                );
+                inputFileListPaths = (
+                );
+                inputPaths = (
+                    "$(SRCROOT)/Cargo.toml"
+                );
+                outputFileListPaths = (
+                );
+                outputPaths = (
+                );
+                runOnlyForDeploymentPostprocessing = 0;
+                shellPath = /bin/bash;
+                shellScript = "set -e; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
 if [ \"$ACTION\" = \"clean\" ]; then
-	cargo clean;
+    cargo clean;
 else
-	cargo build $CARGO_FLAGS;
+    cargo build $CARGO_FLAGS;
 fi
 ";
-		}};
-			"##,
+        }};
+            "##,
                 aggregate_script_id = aggregate_script_id
             ),
         });
@@ -310,10 +307,10 @@ fi
             .map(|o| {
                 format!(
                     r"{} = {{
-						CreatedOnToolsVersion = 9.2;
-						ProvisioningStyle = Automatic;
-					}};
-					",
+                        CreatedOnToolsVersion = 9.2;
+                        ProvisioningStyle = Automatic;
+                    }};
+                    ",
                     o.id
                 )
             })
@@ -325,13 +322,13 @@ fi
             id: manifest_path_id.clone(),
             def: format!(
                 r#"
-				{manifest_path_id} /* Cargo.toml */ = {{
-					isa = PBXFileReference;
-					lastKnownFileType = "sourcecode.text-based-dylib-definition";
-					fileEncoding = 4;
-					path = Cargo.toml;
-					sourceTree = "<group>";
-			}};"#,
+                {manifest_path_id} /* Cargo.toml */ = {{
+                    isa = PBXFileReference;
+                    lastKnownFileType = "sourcecode.text-based-dylib-definition";
+                    fileEncoding = 4;
+                    path = Cargo.toml;
+                    sourceTree = "<group>";
+            }};"#,
                 manifest_path_id = manifest_path_id
             ),
         });
@@ -340,24 +337,24 @@ fi
             other_defs.push(XcodeObject {
                 id: "ADDEDBA66A6E1".to_owned(),
                 def: r#"
-					/* Rust needs libresolv */
-					ADDEDBA66A6E1 = {
-						isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
-						name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT;
-					};
-				"#.to_owned(),
+                    /* Rust needs libresolv */
+                    ADDEDBA66A6E1 = {
+                        isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
+                        name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT;
+                    };
+                "#.to_owned(),
             });
             other_defs.push(XcodeObject {
                 id: "ADDEDBA66A6E2".to_owned(),
                 def: r#"
-				ADDEDBA66A6E2 = {
-					isa = PBXGroup;
-					children = (
-						ADDEDBA66A6E1
-					);
-					name = "Required Libraries";
-					sourceTree = "<group>";
-				};"#.to_owned(),
+                ADDEDBA66A6E2 = {
+                    isa = PBXGroup;
+                    children = (
+                        ADDEDBA66A6E1
+                    );
+                    name = "Required Libraries";
+                    sourceTree = "<group>";
+                };"#.to_owned(),
             });
             folder_refs.push("ADDEDBA66A6E2".to_owned());
         }
@@ -370,101 +367,101 @@ fi
         let tpl = format!(
             r###"// !$*UTF8*$!
 {{
-	archiveVersion = 1;
-	objectVersion = 42;
-	objects = {{
-		{main_group_id} = {{
-			isa = PBXGroup;
-			children = (
-				{folder_refs}
-			);
-			sourceTree = "<group>";
-		}};
+    archiveVersion = 1;
+    objectVersion = 42;
+    objects = {{
+        {main_group_id} = {{
+            isa = PBXGroup;
+            children = (
+                {folder_refs}
+            );
+            sourceTree = "<group>";
+        }};
 
-		{objects}
+        {objects}
 
-		{prod_group_id} = {{
-			isa = PBXGroup;
-			children = (
-				{product_refs}
-			);
-			name = Products;
-			sourceTree = "<group>";
-		}};
+        {prod_group_id} = {{
+            isa = PBXGroup;
+            children = (
+                {product_refs}
+            );
+            name = Products;
+            sourceTree = "<group>";
+        }};
 
-		{target_proxy_id} = {{
-			isa = PBXContainerItemProxy;
-			containerPortal = {project_id};
-			proxyType = 1;
-			remoteGlobalIDString = {cargo_target_id};
-			remoteInfo = Cargo;
-		}};
+        {target_proxy_id} = {{
+            isa = PBXContainerItemProxy;
+            containerPortal = {project_id};
+            proxyType = 1;
+            remoteGlobalIDString = {cargo_target_id};
+            remoteInfo = Cargo;
+        }};
 
-		{cargo_dependency_id} = {{
-			isa = PBXTargetDependency;
-			target = {cargo_target_id};
-			targetProxy = {target_proxy_id};
-		}};
+        {cargo_dependency_id} = {{
+            isa = PBXTargetDependency;
+            target = {cargo_target_id};
+            targetProxy = {target_proxy_id};
+        }};
 
-		{conf_list_id} = {{
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				{conf_release_id} /* Release */,
-				{conf_debug_id} /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		}};
+        {conf_list_id} = {{
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                {conf_release_id} /* Release */,
+                {conf_debug_id} /* Debug */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        }};
 
-		{conf_release_id} = {{
-			isa = XCBuildConfiguration;
-			buildSettings = {{
-				CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target"; /* for cargo */
-				CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/release"; /* for xcode scripts */
-				CARGO_FLAGS = "--release";
-				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
-				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx;
-				PRODUCT_NAME = "{product_name}";
-			}};
-			name = Release;
-		}};
+        {conf_release_id} = {{
+            isa = XCBuildConfiguration;
+            buildSettings = {{
+                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target"; /* for cargo */
+                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/release"; /* for xcode scripts */
+                CARGO_FLAGS = "--release";
+                ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+                ONLY_ACTIVE_ARCH = YES;
+                SDKROOT = macosx;
+                PRODUCT_NAME = "{product_name}";
+            }};
+            name = Release;
+        }};
 
-		{conf_debug_id} = {{
-			isa = XCBuildConfiguration;
-			buildSettings = {{
-				CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target";
-				CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/debug";
-				CARGO_FLAGS = "";
-				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
-				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx;
-				PRODUCT_NAME = "{product_name}";
-			}};
-			name = Debug;
-		}};
+        {conf_debug_id} = {{
+            isa = XCBuildConfiguration;
+            buildSettings = {{
+                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target";
+                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/debug";
+                CARGO_FLAGS = "";
+                ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+                ONLY_ACTIVE_ARCH = YES;
+                SDKROOT = macosx;
+                PRODUCT_NAME = "{product_name}";
+            }};
+            name = Debug;
+        }};
 
-		{project_id} = {{
-			isa = PBXProject;
-			attributes = {{
-				LastUpgradeCheck = 0920;
-				TargetAttributes = {{
-					{target_attrs}                }};
-			}};
-			buildConfigurationList = {conf_list_id};
-			compatibilityVersion = "Xcode 8.0";
-			mainGroup = {main_group_id};
-			productRefGroup = {prod_group_id};
-			projectDirPath = "";
-			projectRoot = "";
-			targets = (
-				{target_refs}
-			);
-		}};
-	}};
-	rootObject = {project_id};
+        {project_id} = {{
+            isa = PBXProject;
+            attributes = {{
+                LastUpgradeCheck = 0920;
+                TargetAttributes = {{
+                    {target_attrs}                }};
+            }};
+            buildConfigurationList = {conf_list_id};
+            compatibilityVersion = "Xcode 8.0";
+            mainGroup = {main_group_id};
+            productRefGroup = {prod_group_id};
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (
+                {target_refs}
+            );
+        }};
+    }};
+    rootObject = {project_id};
 }}
-	"###,
+    "###,
             product_name = self.package.name, // not really used, but Xcode demands it
             project_id = project_id,
             main_group_id = main_group_id,
