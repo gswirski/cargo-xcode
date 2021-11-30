@@ -11,6 +11,7 @@ use std::process::exit;
 fn main() {
     let mut opts = Options::new();
     opts.optopt("", "manifest-path", "Rust project location", "Cargo.toml");
+    opts.optflag("h", "help", "This help");
     let matches = match opts.parse(env::args().skip(1)) {
         Ok(m) => m,
         Err(f) => {
@@ -18,6 +19,15 @@ fn main() {
             exit(1);
         },
     };
+
+    if matches.opt_present("help") {
+        println!("{}", opts.usage("cargo-xcode generates Xcode project files for Cargo crates"));
+        exit(0);
+    }
+
+    for arg in matches.free.iter().filter(|&arg| arg != "xcode") {
+        eprintln!("warning: '{}' arg unused", arg);
+    }
 
     let path = matches.opt_str("manifest-path");
     let mut cmd = cargo_metadata::MetadataCommand::new();
