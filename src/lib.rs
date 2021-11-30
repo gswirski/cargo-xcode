@@ -8,9 +8,11 @@ struct XcodeTarget {
     kind: String,
     base_name: String,
     file_name: String,
+    compiler_flags: String,
     base_name_prefix: &'static str,
     file_type: &'static str,
     prod_type: &'static str,
+    supported_platforms: &'static str,
     skip_install: bool,
 }
 
@@ -74,6 +76,8 @@ impl Generator {
 
             Some(XcodeTarget {
                 kind: kind.to_owned(),
+                compiler_flags: if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE { format!("--bin {}", base_name) } else { "--lib".into() },
+                supported_platforms: if prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE { "macosx iphonesimulator iphoneos appletvsimulator appletvos" } else { "macosx" },
                 base_name,
                 base_name_prefix,
                 file_name, file_type,
@@ -83,7 +87,7 @@ impl Generator {
         })).collect()
     }
 
-    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], cargo_dependency_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
+    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], manifest_path_id: &str, build_rule_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
         let mut other = Vec::new();
         let mut targets = Vec::new();
         let mut products = Vec::new();
@@ -94,7 +98,8 @@ impl Generator {
             let conf_list_id = self.make_id("<config-list>", &prod_id);
             let conf_release_id = self.make_id("<config-release>", &prod_id);
             let conf_debug_id = self.make_id("<config-debug>", &prod_id);
-            let copy_script_id = self.make_id("<copy>", &prod_id);
+            let compile_cargo_id = self.make_id("<cargo>", &prod_id);
+            let manifest_path_build_object_id = self.make_id("<cargo-toml>", &prod_id);
 
             targets.push(XcodeObject {
                 id: target_id.clone(),
@@ -103,12 +108,12 @@ impl Generator {
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
-                {copy_script_id}
+                {compile_cargo_id}
             );
             buildRules = (
+                {build_rule_id}
             );
             dependencies = (
-                {cargo_dependency_id}
             );
             name = "{base_name}-{kind}";
             productName = "{file_name}";
@@ -121,39 +126,44 @@ impl Generator {
                     prod_id = prod_id,
                     file_name = target.file_name,
                     conf_list_id = conf_list_id,
-                    copy_script_id = copy_script_id,
+                    compile_cargo_id = compile_cargo_id,
+                    build_rule_id = build_rule_id,
                     kind = target.kind,
                     target_id = target_id,
-                    cargo_dependency_id = cargo_dependency_id,
                 ),
             });
 
-            // EXECUTABLE_PATH is relative, e.g. "MyApp.app/Contents/MacOS/MyApp"
             other.push(XcodeObject {
-                id: copy_script_id.clone(),
+                id: compile_cargo_id.clone(),
                 def: format!(
-                    r##"{copy_script_id} = {{
-                    isa = PBXShellScriptBuildPhase;
+                    r##"{compile_cargo_id} = {{
+                    isa = PBXSourcesBuildPhase;
                     buildActionMask = 2147483647;
-                    name = "Copy files ({file_name})";
                     files = (
-                    );
-                    inputFileListPaths = (
-                    );
-                    inputPaths = (
-                        "$(CARGO_XCODE_PRODUCTS_DIR)/{file_name}",
-                    );
-                    outputFileListPaths = ();
-                    outputPaths = (
-                        "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
+                        {manifest_path_build_object_id}
                     );
                     runOnlyForDeploymentPostprocessing = 0;
-                    shellPath = /bin/sh;
-                    shellScript = "ln -f \"${{CARGO_XCODE_PRODUCTS_DIR}}/{file_name}\" \"${{BUILT_PRODUCTS_DIR}}/${{EXECUTABLE_PATH}}\"";
                 }};
                 "##,
-                    copy_script_id = copy_script_id,
-                    file_name = target.file_name,
+                    compile_cargo_id = compile_cargo_id,
+                    manifest_path_build_object_id = manifest_path_build_object_id,
+                ),
+            });
+
+            other.push(XcodeObject {
+                id: manifest_path_build_object_id.clone(),
+                def: format!(r#"
+                {manifest_path_build_object_id} /* Cargo.toml in Sources */ = {{
+                    isa = PBXBuildFile;
+                    fileRef = {manifest_path_id} /* Cargo.toml */;
+                    settings = {{
+                        COMPILER_FLAGS = "{compiler_flags}"; /* == OTHER_INPUT_FILE_FLAGS */
+                    }};
+                }};
+                "#,
+                    manifest_path_build_object_id = manifest_path_build_object_id,
+                    manifest_path_id = manifest_path_id,
+                    compiler_flags = target.compiler_flags,
                 ),
             });
 
@@ -195,6 +205,8 @@ impl Generator {
                 isa = XCBuildConfiguration;
                 buildSettings = {{
                     PRODUCT_NAME = "{base_name_prefix}{base_name}";
+                    "CARGO_XCODE_CARGO_FILE_NAME" = "{file_name}";
+                    SUPPORTED_PLATFORMS = "{supported_platforms}";
                     {skip_install_flags}
                 }};
                 name = {name};
@@ -202,8 +214,10 @@ impl Generator {
                     name = name,
                     id = id,
                     kind = target.kind,
+                    file_name = target.file_name,
                     base_name = target.base_name,
                     base_name_prefix = target.base_name_prefix,
+                    supported_platforms = target.supported_platforms,
                     skip_install_flags = skip_install_flags
                 ),
             }));
@@ -234,72 +248,16 @@ impl Generator {
         let main_group_id = self.make_id("", "<root>");
         let prod_group_id = self.make_id("", "Products");
         let project_id = self.make_id("", "<project>");
-        let cargo_target_id = self.make_id("", "<cargo>");
-        let target_proxy_id = self.make_id("proxy", "<cargo>");
-        let cargo_dependency_id = self.make_id("dep", "<cargo>");
+        let build_rule_id = self.make_id("", "BuildRule");
         let conf_list_id = self.make_id("", "<configuration-list>");
         let conf_release_id = self.make_id("configuration", "Release");
         let conf_debug_id = self.make_id("configuration", "Debug");
         let manifest_path_id = self.make_id("", "Cargo.toml");
-        let aggregate_script_id = self.make_id("", "<cargo>sh");
 
         let rust_targets = self.project_targets();
         let has_static = rust_targets.iter().any(|t| t.prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE);
-        let (mut targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &cargo_dependency_id);
+        let (targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id);
 
-        targets.push(XcodeObject {
-            id: cargo_target_id.clone(),
-            def: format!(
-                r##"{cargo_target_id} = {{
-            isa = PBXAggregateTarget;
-            buildConfigurationList = {conf_list_id};
-            buildPhases = (
-                {aggregate_script_id}
-            );
-            dependencies = (
-            );
-            name = Cargo;
-            productName = Cargo;
-        }};
-            "##,
-                cargo_target_id = cargo_target_id,
-                conf_list_id = conf_list_id,
-                aggregate_script_id = aggregate_script_id
-            ),
-        });
-
-        other_defs.push(XcodeObject {
-            id: aggregate_script_id.clone(),
-            def: format!(
-                r##"{aggregate_script_id} = {{
-                isa = PBXShellScriptBuildPhase;
-                buildActionMask = 2147483647;
-                name = "Cargo build";
-                files = (
-                );
-                inputFileListPaths = (
-                );
-                inputPaths = (
-                    "$(SRCROOT)/Cargo.toml"
-                );
-                outputFileListPaths = (
-                );
-                outputPaths = (
-                );
-                runOnlyForDeploymentPostprocessing = 0;
-                shellPath = /bin/bash;
-                shellScript = "set -e; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
-if [ \"$ACTION\" = \"clean\" ]; then
-    cargo clean;
-else
-    cargo build $CARGO_FLAGS;
-fi
-";
-        }};
-            "##,
-                aggregate_script_id = aggregate_script_id
-            ),
-        });
 
         let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
         let target_refs = targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
@@ -365,12 +323,71 @@ fi
         let objects = products.into_iter().chain(targets).chain(other_defs).map(|o| o.def).collect::<String>();
         let folder_refs = folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
 
+        let build_script = r##"
+set -eu; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
+if [ "${IS_MACCATALYST-NO}" = YES ]; then
+    CARGO_XCODE_TARGET_TRIPLE="${CARGO_XCODE_TARGET_ARCH}-apple-ios-macabi"
+else
+    CARGO_XCODE_TARGET_TRIPLE="${CARGO_XCODE_TARGET_ARCH}-apple-${CARGO_XCODE_TARGET_OS}"
+fi
+if [ "$CARGO_XCODE_TARGET_OS" != "darwin" ]; then
+    PATH="${PATH/\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/bin:/xcode-provided-ld-cant-link-lSystem-for-the-host-build-script:}"
+fi
+if [ "$CARGO_XCODE_BUILD_MODE" == release ]; then
+    OTHER_INPUT_FILE_FLAGS="${OTHER_INPUT_FILE_FLAGS} --release"
+fi
+if ! rustup target list --installed | egrep -q "${CARGO_XCODE_TARGET_TRIPLE}"; then
+    echo "warning: this build requires rustup toolchain for $CARGO_XCODE_TARGET_TRIPLE, but it isn't installed"
+    rustup target add "${CARGO_XCODE_TARGET_TRIPLE}" || echo >&2 "warning: can't install $CARGO_XCODE_TARGET_TRIPLE"
+fi
+if [ "$ACTION" = clean ]; then
+ set -x;
+ cargo clean ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
+else
+ set -x;
+ cargo build ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"
+fi
+ln -f -- "${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}" "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+"##.escape_default();
+
+        let common_build_settings = format!(r##"
+            ALWAYS_SEARCH_USER_PATHS = NO;
+            SUPPORTS_MACCATALYST = YES;
+            CARGO_TARGET_DIR = "$(TARGET_TEMP_DIR)/cargo-target"; /* for cargo */
+            "CARGO_XCODE_TARGET_ARCH[arch=arm64*]" = "aarch64";
+            "CARGO_XCODE_TARGET_ARCH[arch=x86_64*]" = "x86_64"; /* catalyst adds h suffix */
+            "CARGO_XCODE_TARGET_ARCH[arch=i386]" = "i686";
+            "CARGO_XCODE_TARGET_OS[sdk=macosx*]" = "darwin";
+            "CARGO_XCODE_TARGET_OS[sdk=iphonesimulator*]" = "ios-sim";
+            "CARGO_XCODE_TARGET_OS[sdk=iphoneos*]" = "ios";
+            "CARGO_XCODE_TARGET_OS[sdk=appletvsimulator*]" = "tvos";
+            "CARGO_XCODE_TARGET_OS[sdk=appletvos*]" = "tvos";
+            PRODUCT_NAME = "{product_name}";
+            SDKROOT = macosx;
+        "##,
+            product_name = self.package.name, // used as a base for output filename in Xcode
+        );
+
         let tpl = format!(
             r###"// !$*UTF8*$!
 {{
     archiveVersion = 1;
     objectVersion = 55;
     objects = {{
+        {build_rule_id} = {{
+            isa = PBXBuildRule;
+            compilerSpec = com.apple.compilers.proxy.script;
+            name = "Cargo project build";
+            filePatterns = "*/Cargo.toml"; /* must contain asterisk */
+            fileType = pattern.proxy;
+            inputFiles = ();
+            isEditable = 1;
+            outputFiles = (
+                "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)",
+            );
+            script = "{build_script}";
+        }};
+
         {main_group_id} = {{
             isa = PBXGroup;
             children = (
@@ -390,20 +407,6 @@ fi
             sourceTree = "<group>";
         }};
 
-        {target_proxy_id} = {{
-            isa = PBXContainerItemProxy;
-            containerPortal = {project_id};
-            proxyType = 1;
-            remoteGlobalIDString = {cargo_target_id};
-            remoteInfo = Cargo;
-        }};
-
-        {cargo_dependency_id} = {{
-            isa = PBXTargetDependency;
-            target = {cargo_target_id};
-            targetProxy = {target_proxy_id};
-        }};
-
         {conf_list_id} = {{
             isa = XCConfigurationList;
             buildConfigurations = (
@@ -417,13 +420,8 @@ fi
         {conf_release_id} = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
-                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target"; /* for cargo */
-                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/release"; /* for xcode scripts */
-                CARGO_FLAGS = "--release";
-                ARCHS = "$(NATIVE_ARCH_ACTUAL)";
-                ONLY_ACTIVE_ARCH = YES;
-                SDKROOT = macosx;
-                PRODUCT_NAME = "{product_name}";
+                {common_build_settings}
+                "CARGO_XCODE_BUILD_MODE" = "release"; /* for xcode scripts */
             }};
             name = Release;
         }};
@@ -431,13 +429,9 @@ fi
         {conf_debug_id} = {{
             isa = XCBuildConfiguration;
             buildSettings = {{
-                CARGO_TARGET_DIR = "$(BUILD_DIR)/cargo-target";
-                CARGO_XCODE_PRODUCTS_DIR = "$(BUILD_DIR)/cargo-target/debug";
-                CARGO_FLAGS = "";
-                ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+                {common_build_settings}
+                "CARGO_XCODE_BUILD_MODE" = "debug"; /* for xcode scripts */
                 ONLY_ACTIVE_ARCH = YES;
-                SDKROOT = macosx;
-                PRODUCT_NAME = "{product_name}";
             }};
             name = Debug;
         }};
@@ -463,8 +457,9 @@ fi
     rootObject = {project_id};
 }}
     "###,
-            product_name = self.package.name, // not really used, but Xcode demands it
             project_id = project_id,
+            build_rule_id = build_rule_id,
+            build_script = build_script,
             main_group_id = main_group_id,
             prod_group_id = prod_group_id,
             folder_refs = folder_refs,
@@ -472,12 +467,10 @@ fi
             objects = objects,
             target_attrs = target_attrs,
             target_refs = target_refs,
-            cargo_target_id = cargo_target_id,
-            cargo_dependency_id = cargo_dependency_id,
-            target_proxy_id = target_proxy_id,
             conf_list_id = conf_list_id,
             conf_debug_id = conf_debug_id,
-            conf_release_id = conf_release_id
+            conf_release_id = conf_release_id,
+            common_build_settings = common_build_settings
         );
 
         Ok(tpl)
