@@ -27,6 +27,7 @@ fn main() {
 
     let path = matches.opt_str("manifest-path");
     let mut cmd = cargo_metadata::MetadataCommand::new();
+    cmd.no_deps();
     if let Some(ref path) = path {
         cmd.manifest_path(path);
     }
