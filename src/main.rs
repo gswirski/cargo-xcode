@@ -6,8 +6,9 @@ use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
-    opts.optopt("", "manifest-path", "Rust project location", "Cargo.toml");
-    opts.optflag("h", "help", "This help");
+    opts.optopt("", "manifest-path", "Location of the Rust/Cargo project to convert.", "Cargo.toml");
+    opts.optopt("", "output-dir", "Where to write xcodeproj to (default: same directory as the crate)", "");
+    opts.optflag("h", "help", "This help.");
     let matches = match opts.parse(env::args().skip(1)) {
         Ok(m) => m,
         Err(f) => {
@@ -26,6 +27,7 @@ fn main() {
     }
 
     let path = matches.opt_str("manifest-path");
+    let output_dir = matches.opt_str("output-dir");
     let mut cmd = cargo_metadata::MetadataCommand::new();
     cmd.no_deps();
     if let Some(ref path) = path {
@@ -43,7 +45,7 @@ fn main() {
         .into_iter()
         .filter_map(filter_package)
         .map(|p| {
-            let g = cargo_xcode::Generator::new(p);
+            let g = cargo_xcode::Generator::new(p, output_dir.as_ref().map(From::from));
             let p = g.write_pbxproj().unwrap();
             println!("OK:\n{}", p.display());
         })
