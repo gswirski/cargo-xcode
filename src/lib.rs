@@ -22,6 +22,14 @@ struct XcodeObject {
     def: String,
 }
 
+struct XcodeSections {
+    buildfile: Vec<XcodeObject>,
+    filereference: Vec<XcodeObject>,
+    targets: Vec<XcodeObject>,
+    product_ids: Vec<String>,
+    other: Vec<XcodeObject>,
+}
+
 pub struct Generator {
     id_base: sha1::Sha1,
     package: Package,
@@ -98,10 +106,12 @@ impl Generator {
         })}).collect()
     }
 
-    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], manifest_path_id: &str, build_rule_id: &str, lipo_script_id: &str) -> (Vec<XcodeObject>, Vec<XcodeObject>, Vec<XcodeObject>) {
+    fn products_pbxproj(&self, cargo_targets: &[XcodeTarget], manifest_path_id: &str, build_rule_id: &str, lipo_script_id: &str) -> XcodeSections {
         let mut other = Vec::new();
         let mut targets = Vec::new();
-        let mut products = Vec::new();
+        let mut product_ids = Vec::new();
+        let mut buildfile = Vec::new();
+        let mut filereference = Vec::new();
 
         for target in cargo_targets.iter() {
             let prod_id = self.make_id(target.file_type, &target.cargo_file_name);
@@ -119,11 +129,11 @@ impl Generator {
             isa = PBXNativeTarget;
             buildConfigurationList = {conf_list_id};
             buildPhases = (
-                {compile_cargo_id},
-                {lipo_script_id},
+                {compile_cargo_id} /* Sources */,
+                {lipo_script_id} /* Universal Binary lipo */,
             );
             buildRules = (
-                {build_rule_id}
+                {build_rule_id} /* PBXBuildRule */,
             );
             dependencies = (
             );
@@ -163,7 +173,7 @@ impl Generator {
                 ),
             });
 
-            other.push(XcodeObject {
+            buildfile.push(XcodeObject {
                 id: manifest_path_build_object_id.clone(),
                 def: format!(r#"
                 {manifest_path_build_object_id} /* Cargo.toml in Sources */ = {{
@@ -236,7 +246,8 @@ impl Generator {
                 ),
             }));
 
-            products.push(XcodeObject {
+            product_ids.push(prod_id.to_owned());
+            filereference.push(XcodeObject {
                 id: prod_id.to_owned(),
                 // path of product does not seem to work. Xcode writes it, but can't read it.
                 def: format!(
@@ -255,12 +266,15 @@ impl Generator {
                 ),
             });
         }
-        (targets, products, other)
+        XcodeSections {
+            targets, product_ids, buildfile, other, filereference
+        }
     }
 
     pub fn pbxproj(&self) -> Result<String, io::Error> {
         let main_group_id = self.make_id("", "<root>");
         let prod_group_id = self.make_id("", "Products");
+        let frameworks_group_id = self.make_id("", "Frameworks"); // This is a magic name that Xcode uses to show Products
         let project_id = self.make_id("", "<project>");
         let build_rule_id = self.make_id("", "BuildRule");
         let lipo_script_id = self.make_id("", "LipoScript");
@@ -271,12 +285,12 @@ impl Generator {
 
         let rust_targets = self.project_targets();
         let has_static = rust_targets.iter().any(|t| t.prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE);
-        let (targets, products, mut other_defs) = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id, &lipo_script_id);
+        let mut sections = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id, &lipo_script_id);
+        let mut groups = vec![];
 
-        let product_refs = products.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
-        let target_refs = targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
-        let target_attrs = targets
-            .iter()
+        let product_refs = sections.product_ids.iter().map(|id| format!("{},\n", id)).collect::<String>();
+        let target_refs = sections.targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
+        let target_attrs = sections.targets.iter()
             .map(|o| {
                 format!(
                     r"{} = {{
@@ -288,10 +302,12 @@ impl Generator {
                 )
             })
             .collect::<String>();
-        let mut folder_refs = Vec::new();
+        let mut main_folder_refs = Vec::new();
+        let mut frameworks_folder_refs = Vec::new();
 
-        folder_refs.push(manifest_path_id.clone());
-        other_defs.push(XcodeObject {
+        main_folder_refs.push(manifest_path_id.clone());
+
+        sections.filereference.push(XcodeObject {
             id: manifest_path_id.clone(),
             def: format!(
                 r#"
@@ -307,7 +323,7 @@ impl Generator {
         });
 
         if has_static {
-            other_defs.push(XcodeObject {
+            sections.filereference.push(XcodeObject {
                 id: "ADDEDBA66A6E1".to_owned(),
                 def: r#"
                     /* Rust needs libresolv */
@@ -317,25 +333,30 @@ impl Generator {
                     };
                 "#.to_owned(),
             });
-            other_defs.push(XcodeObject {
+            groups.push(XcodeObject {
                 id: "ADDEDBA66A6E2".to_owned(),
                 def: r#"
-                ADDEDBA66A6E2 = {
+                ADDEDBA66A6E2 /* Required for static linking */ = {
                     isa = PBXGroup;
                     children = (
                         ADDEDBA66A6E1
                     );
-                    name = "Required Libraries";
+                    name = "Required for static linking";
                     sourceTree = "<group>";
                 };"#.to_owned(),
             });
-            folder_refs.push("ADDEDBA66A6E2".to_owned());
+            frameworks_folder_refs.push("ADDEDBA66A6E2".to_owned());
         }
 
-        folder_refs.push(prod_group_id.clone());
+        main_folder_refs.push(prod_group_id.clone());
+        main_folder_refs.push(frameworks_group_id.clone());
 
-        let objects = products.into_iter().chain(targets).chain(other_defs).map(|o| o.def).collect::<String>();
-        let folder_refs = folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
+        let buildfile = sections.buildfile.into_iter().map(|o| o.def).collect::<String>();
+        let filereference = sections.filereference.into_iter().map(|o| o.def).collect::<String>();
+        let objects = sections.other.into_iter().map(|o| o.def).collect::<String>();
+        let targets = sections.targets.into_iter().map(|o| o.def).collect::<String>();
+        let main_folder_refs = main_folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
+        let frameworks_folder_refs = frameworks_folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
 
         let build_script = r##"
 set -eu; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;
@@ -409,22 +430,71 @@ fi
 {{
     /* generated with cargo-xcode {crate_version} */
     archiveVersion = 1;
-    objectVersion = 55;
+    classes = {{
+    }};
+    objectVersion = 53;
     objects = {{
-        {build_rule_id} = {{
+/* Begin PBXBuildFile section */
+        {buildfile}
+/* End PBXBuildFile section */
+
+/* Begin PBXBuildRule section */
+        {build_rule_id} /* PBXBuildRule */ = {{
             isa = PBXBuildRule;
             compilerSpec = com.apple.compilers.proxy.script;
             dependencyFile = "$(DERIVED_FILE_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME).d";
-            name = "Cargo project build";
             filePatterns = "*/Cargo.toml"; /* must contain asterisk */
             fileType = pattern.proxy;
             inputFiles = ();
-            isEditable = 1;
+            isEditable = 0;
+            name = "Cargo project build";
             outputFiles = (
                 "$(BUILT_PRODUCTS_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME)",
             );
             script = "{build_script}";
         }};
+/* End PBXBuildRule section */
+
+/* Begin PBXFileReference section */
+        {filereference}
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+        {frameworks_group_id} /* Frameworks */ = {{
+            isa = PBXGroup;
+            children = (
+                {frameworks_folder_refs}
+            );
+            name = Frameworks;
+            sourceTree = "<group>";
+        }};
+
+        {groups}
+
+        {prod_group_id} /* Products */ = {{
+            isa = PBXGroup;
+            children = (
+                {product_refs}
+            );
+            name = Products;
+            sourceTree = "<group>";
+        }};
+
+        {main_group_id} /* Main */ = {{
+            isa = PBXGroup;
+            children = (
+                {main_folder_refs}
+            );
+            sourceTree = "<group>";
+        }};
+
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        {targets}
+/* End PBXNativeTarget section */
+
+        {objects}
 
         {lipo_script_id} /* LipoScript */ = {{
             name = "Universal Binary lipo";
@@ -442,25 +512,6 @@ fi
             runOnlyForDeploymentPostprocessing = 0;
             shellPath = /bin/sh;
             shellScript = "set -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$BUILT_PRODUCTS_DIR/$EXECUTABLE_PATH\"";
-        }};
-
-        {main_group_id} = {{
-            isa = PBXGroup;
-            children = (
-                {folder_refs}
-            );
-            sourceTree = "<group>";
-        }};
-
-        {objects}
-
-        {prod_group_id} = {{
-            isa = PBXGroup;
-            children = (
-                {product_refs}
-            );
-            name = Products;
-            sourceTree = "<group>";
         }};
 
         {conf_list_id} = {{
@@ -495,20 +546,27 @@ fi
         {project_id} = {{
             isa = PBXProject;
             attributes = {{
-                LastUpgradeCheck = 0920;
+                LastUpgradeCheck = 1300;
                 TargetAttributes = {{
                     {target_attrs}                }};
             }};
             buildConfigurationList = {conf_list_id};
-            compatibilityVersion = "Xcode 8.0";
+            compatibilityVersion = "Xcode 11.4";
+             developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (
+                    en,
+                    Base,
+            );
             mainGroup = {main_group_id};
-            productRefGroup = {prod_group_id};
+            productRefGroup = {prod_group_id} /* Products */;
             projectDirPath = "";
             projectRoot = "";
             targets = (
                 {target_refs}
             );
         }};
+
     }};
     rootObject = {project_id};
 }}
@@ -520,9 +578,15 @@ fi
             build_script = build_script,
             main_group_id = main_group_id,
             prod_group_id = prod_group_id,
-            folder_refs = folder_refs,
+            frameworks_group_id = frameworks_group_id,
+            main_folder_refs = main_folder_refs,
+            frameworks_folder_refs = frameworks_folder_refs,
             product_refs = product_refs,
+            buildfile = buildfile,
+            filereference = filereference,
+            groups = groups.into_iter().map(|g| g.def).collect::<String>(),
             objects = objects,
+            targets = targets,
             target_attrs = target_attrs,
             target_refs = target_refs,
             conf_list_id = conf_list_id,
