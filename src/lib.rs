@@ -1,3 +1,5 @@
+//! cargo-xcode is meant to be used from command line. See [CLI usage docs](https://lib.rs/cargo-xcode).
+
 use cargo_metadata::Package;
 use std::path::{Path, PathBuf};
 use std::fs;

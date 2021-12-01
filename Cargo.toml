@@ -2,8 +2,8 @@
 authors = ["Kornel <kornel@geekhood.net>"]
 categories = ["development-tools::cargo-plugins", "development-tools::build-utils", "command-line-utilities"]
 description = "Make Xcode project files from Cargo projects"
-documentation = "https://gitlab.com/kornelski/cargo-xcode/blob/master/README.md#requirements"
-homepage = "https://crates.rs/crates/cargo-xcode"
+documentation = "https://lib.rs/crates/cargo-xcode"
+homepage = "https://lib.rs/crates/cargo-xcode"
 keywords = ["cargo", "subcommand", "xcode", "project"]
 license = "MIT"
 name = "cargo-xcode"
