@@ -378,6 +378,7 @@ fi
 if [ "$CARGO_XCODE_TARGET_OS" != "darwin" ]; then
     PATH="${PATH/\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/bin:/xcode-provided-ld-cant-link-lSystem-for-the-host-build-script:}"
 fi
+PATH="$PATH:/opt/homebrew/bin" # Rust projects often depend on extra tools like nasm, which Xcode lacks
 if [ "$CARGO_XCODE_BUILD_MODE" == release ]; then
     OTHER_INPUT_FILE_FLAGS="${OTHER_INPUT_FILE_FLAGS} --release"
 fi
