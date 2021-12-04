@@ -458,7 +458,7 @@ fi
             isEditable = 0;
             name = "Cargo project build";
             outputFiles = (
-                "$(BUILT_PRODUCTS_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME)",
+                "$(OBJECT_FILE_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME)",
             );
             script = "# generated with cargo-xcode {crate_version}\n{build_script}";
         }};
