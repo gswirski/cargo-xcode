@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::io;
 use std::io::Write;
+use crc::{Crc, CRC_64_ECMA_182};
 
 struct XcodeTarget {
     kind: String,
@@ -33,7 +34,8 @@ struct XcodeSections {
 }
 
 pub struct Generator {
-    id_base: sha1::Sha1,
+    crc: Crc::<u64>,
+    id_base: u64,
     package: Package,
     output_dir: Option<PathBuf>,
 }
@@ -43,24 +45,21 @@ const EXECUTABLE_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.tool";
 
 impl Generator {
     pub fn new(package: Package, output_dir: Option<PathBuf>) -> Self {
-        let mut id_base = sha1::Sha1::new();
-        id_base.update(package.id.repr.as_bytes());
+        let crc = Crc::<u64>::new(&CRC_64_ECMA_182);
+        let id_base = crc.checksum(package.id.repr.as_bytes());
 
-        Self { id_base, package, output_dir }
+        Self { crc, id_base, package, output_dir }
     }
 
     fn make_id(&self, kind: &str, name: &str) -> String {
-        let mut sha = self.id_base.clone();
-        sha.update(kind.as_bytes());
-        sha.update(&[0]);
-        sha.update(name.as_bytes());
+        let mut crc = self.crc.digest();
+        crc.update(&self.id_base.to_ne_bytes());
+        crc.update(kind.as_bytes());
+        let kind = crc.finalize();
 
-        let mut out = String::with_capacity(24);
-        out.push_str("CA60");
-        for &byte in &sha.digest().bytes()[0..10] {
-            out.push_str(&format!("{:02X}", byte));
-        }
-        debug_assert_eq!(24, out.len());
+        let name = self.crc.checksum(name.as_bytes());
+        let mut out = format!("CA60{:08X}{:012X}", kind as u32, name);
+        out.truncate(24);
         out
     }
 
