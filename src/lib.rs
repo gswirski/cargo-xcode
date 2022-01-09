@@ -38,17 +38,18 @@ pub struct Generator {
     id_base: u64,
     package: Package,
     output_dir: Option<PathBuf>,
+    custom_project_name: Option<String>,
 }
 
 const STATIC_LIB_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.library.static";
 const EXECUTABLE_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.tool";
 
 impl Generator {
-    pub fn new(package: Package, output_dir: Option<PathBuf>) -> Self {
+    pub fn new(package: Package, output_dir: Option<PathBuf>, custom_project_name: Option<String>) -> Self {
         let crc = Crc::<u64>::new(&CRC_64_ECMA_182);
         let id_base = crc.checksum(package.id.repr.as_bytes());
 
-        Self { crc, id_base, package, output_dir }
+        Self { crc, id_base, package, output_dir, custom_project_name }
     }
 
     fn make_id(&self, kind: &str, name: &str) -> String {
@@ -74,17 +75,17 @@ impl Generator {
         Ok(proj_path)
     }
 
-    fn project_targets(&self) -> Vec<XcodeTarget> {
+fn project_targets(&self) -> Vec<XcodeTarget> {
         self.package.targets.iter().flat_map(|target| {
-            let base_name = target.name.clone();
+            let base_name = self.custom_project_name.as_ref().unwrap_or(&target.name).clone();
             let required_features = target.required_features.join(",");
             target.kind.iter().filter_map(move |kind| {
             let (cargo_file_name, xcode_file_name, xcode_product_name, file_type, prod_type, skip_install) = match kind.as_str() {
-                "bin" => (base_name.clone(), base_name.clone(),  base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
-                "cdylib" => (format!("lib{}.dylib", base_name.replace('-', "_")), format!("{}.dylib", base_name), base_name.clone(), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
+                "bin" => (target.name.clone(), base_name.clone(),  base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
+                "cdylib" => (format!("lib{}.dylib", target.name.replace('-', "_")), format!("{}.dylib", base_name), base_name.clone(), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
                 "staticlib" => {
                     // must have _static suffix to avoid build errors when dylib also exists
-                    (format!("lib{}.a", base_name.replace('-', "_")), format!("lib{}_static.a", base_name), format!("{}_static", base_name), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
+                    (format!("lib{}.a", target.name.replace('-', "_")), format!("lib{}_static.a", base_name), format!("{}_static", base_name), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
                 },
                 _ => return None,
             };
@@ -607,7 +608,7 @@ fi
     }
 
     fn prepare_project_path(&self) -> Result<PathBuf, io::Error> {
-        let proj_file_name = format!("{}.xcodeproj", self.package.name);
+        let proj_file_name = format!("{}.xcodeproj", self.custom_project_name.as_ref().unwrap_or(&self.package.name));
         let proj_path = match &self.output_dir {
             Some(path) => path.join(proj_file_name),
             None => Path::new(&self.package.manifest_path).with_file_name(proj_file_name),

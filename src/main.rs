@@ -8,6 +8,7 @@ fn main() {
     let mut opts = Options::new();
     opts.optopt("", "manifest-path", "Location of the Rust/Cargo project to convert.", "Cargo.toml");
     opts.optopt("", "output-dir", "Where to write xcodeproj to (default: same directory as the crate)", "");
+    opts.optopt("", "project-name", "Override crate name to use a differnet name in Xcode", "");
     opts.optflag("h", "help", "This help.");
     let matches = match opts.parse(env::args().skip(1)) {
         Ok(m) => m,
@@ -41,11 +42,13 @@ fn main() {
         },
     };
 
+    let custom_project_name = matches.opt_str("project-name");
+
     let ok = meta.packages
         .into_iter()
         .filter_map(filter_package)
-        .map(|p| {
-            let g = cargo_xcode::Generator::new(p, output_dir.as_ref().map(From::from));
+        .map(move |p| {
+            let g = cargo_xcode::Generator::new(p, output_dir.as_ref().map(From::from), custom_project_name.clone());
             let p = g.write_pbxproj().unwrap();
             println!("OK:\n{}", p.display());
         })
