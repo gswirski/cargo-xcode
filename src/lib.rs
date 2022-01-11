@@ -260,7 +260,7 @@ fn project_targets(&self) -> Vec<XcodeTarget> {
             explicitFileType = "{file_type}";
             includeInIndex = 0;
             name = "{xcode_file_name}";
-            sourceTree = BUILT_PRODUCTS_DIR;
+            sourceTree = TARGET_BUILD_DIR;
         }};"##,
                     prod_id = prod_id,
                     kind = target.kind,
@@ -516,11 +516,11 @@ fi
             );
             outputFileListPaths = ();
             outputPaths = (
-                "$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)"
+                "$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)"
             );
             runOnlyForDeploymentPostprocessing = 0;
             shellPath = /bin/sh;
-            shellScript = "# generated with cargo-xcode {crate_version}\nset -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$BUILT_PRODUCTS_DIR/$EXECUTABLE_PATH\"";
+            shellScript = "# generated with cargo-xcode {crate_version}\nset -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\"";
         }};
 
         {conf_list_id} = {{
