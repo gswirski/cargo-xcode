@@ -425,6 +425,7 @@ fi
             "CARGO_XCODE_TARGET_ARCH[arch=i386]" = "i686";
             "CARGO_XCODE_TARGET_OS[sdk=macosx*]" = "darwin";
             "CARGO_XCODE_TARGET_OS[sdk=iphonesimulator*]" = "ios-sim";
+            "CARGO_XCODE_TARGET_OS[sdk=iphonesimulator*][arch=x86_64*]" = "ios";
             "CARGO_XCODE_TARGET_OS[sdk=iphoneos*]" = "ios";
             "CARGO_XCODE_TARGET_OS[sdk=appletvsimulator*]" = "tvos";
             "CARGO_XCODE_TARGET_OS[sdk=appletvos*]" = "tvos";
