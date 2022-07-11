@@ -9,15 +9,15 @@ license = "MIT"
 name = "cargo-xcode"
 readme = "README.md"
 repository = "https://gitlab.com/kornelski/cargo-xcode"
-version = "1.4.2"
+version = "1.4.3"
 edition = "2018"
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
-cargo_metadata = "0.14.1"
-crc = "2.1.0"
+cargo_metadata = "0.15.0"
+crc = "3.0.0"
 getopts = "0.2.21"
 pathdiff = "0.2.1"
 
