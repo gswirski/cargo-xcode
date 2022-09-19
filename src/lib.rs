@@ -1,11 +1,10 @@
 //! cargo-xcode is meant to be used from command line. See [CLI usage docs](https://lib.rs/cargo-xcode).
 
 use cargo_metadata::Package;
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::io;
-use std::io::Write;
 use crc::{Crc, CRC_64_ECMA_182};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 struct XcodeTarget {
     kind: String,
@@ -34,7 +33,7 @@ struct XcodeSections {
 }
 
 pub struct Generator {
-    crc: Crc::<u64>,
+    crc: Crc<u64>,
     id_base: u64,
     package: Package,
     output_dir: Option<PathBuf>,
@@ -75,7 +74,7 @@ impl Generator {
         Ok(proj_path)
     }
 
-fn project_targets(&self) -> Vec<XcodeTarget> {
+    fn project_targets(&self) -> Vec<XcodeTarget> {
         self.package.targets.iter().flat_map(|target| {
             let base_name = self.custom_project_name.as_ref().unwrap_or(&target.name).clone();
             let required_features = target.required_features.join(",");

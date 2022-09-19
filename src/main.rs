@@ -1,6 +1,6 @@
+use cargo_metadata::{Package, Target};
 use getopts::Options;
 use std::env;
-use cargo_metadata::{Package, Target};
 
 use std::process::exit;
 
