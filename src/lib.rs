@@ -41,6 +41,7 @@ pub struct Generator {
 }
 
 const STATIC_LIB_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.library.static";
+const DY_LIB_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.library.dynamic";
 const EXECUTABLE_APPLE_PRODUCT_TYPE: &str = "com.apple.product-type.tool";
 
 impl Generator {
@@ -81,17 +82,17 @@ impl Generator {
             target.kind.iter().filter_map(move |kind| {
             let (cargo_file_name, xcode_file_name, xcode_product_name, file_type, prod_type, skip_install) = match kind.as_str() {
                 "bin" => (target.name.clone(), base_name.clone(),  base_name.clone(), "compiled.mach-o.executable", EXECUTABLE_APPLE_PRODUCT_TYPE, false),
-                "cdylib" => (format!("lib{}.dylib", target.name.replace('-', "_")), format!("{}.dylib", base_name), base_name.clone(), "compiled.mach-o.dylib", "com.apple.product-type.library.dynamic", false),
+                "cdylib" => (format!("lib{}.dylib", target.name.replace('-', "_")), format!("{base_name}.dylib"), base_name.clone(), "compiled.mach-o.dylib", DY_LIB_APPLE_PRODUCT_TYPE, false),
                 "staticlib" => {
                     // must have _static suffix to avoid build errors when dylib also exists
-                    (format!("lib{}.a", target.name.replace('-', "_")), format!("lib{}_static.a", base_name), format!("{}_static", base_name), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
+                    (format!("lib{}.a", target.name.replace('-', "_")), format!("lib{base_name}_static.a"), format!("{base_name}_static"), "archive.ar", STATIC_LIB_APPLE_PRODUCT_TYPE, true)
                 },
                 _ => return None,
             };
 
-            let mut compiler_flags = if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE { format!("--bin {}", base_name) } else { "--lib".into() };
+            let mut compiler_flags = if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE { format!("--bin '{base_name}'") } else { "--lib".into() };
             if prod_type == EXECUTABLE_APPLE_PRODUCT_TYPE && !required_features.is_empty() {
-                compiler_flags.push_str(&format!(" --features '{}'", required_features)); // Xcode escapes \=
+                compiler_flags.push_str(&format!(" --features '{required_features}'")); // Xcode escapes \=
             }
 
             Some(XcodeTarget {
@@ -147,14 +148,8 @@ impl Generator {
         "##,
                     base_name = target.base_name,
                     prod_type = target.prod_type,
-                    prod_id = prod_id,
                     xcode_file_name = target.xcode_file_name,
-                    conf_list_id = conf_list_id,
-                    compile_cargo_id = compile_cargo_id,
-                    lipo_script_id = lipo_script_id,
-                    build_rule_id = build_rule_id,
                     kind = target.kind,
-                    target_id = target_id,
                 ),
             });
 
@@ -169,10 +164,7 @@ impl Generator {
                     );
                     runOnlyForDeploymentPostprocessing = 0;
                 }};
-                "##,
-                    compile_cargo_id = compile_cargo_id,
-                    manifest_path_build_object_id = manifest_path_build_object_id,
-                ),
+                "##),
             });
 
             buildfile.push(XcodeObject {
@@ -186,8 +178,6 @@ impl Generator {
                     }};
                 }};
                 "#,
-                    manifest_path_build_object_id = manifest_path_build_object_id,
-                    manifest_path_id = manifest_path_id,
                     compiler_flags = target.compiler_flags,
                 ),
             });
@@ -205,10 +195,7 @@ impl Generator {
             defaultConfigurationIsVisible = 0;
             defaultConfigurationName = Release;
         }};"##,
-                    conf_list_id = conf_list_id,
                     kind = target.kind,
-                    conf_release_id = conf_release_id,
-                    conf_debug_id = conf_debug_id,
                 ),
             });
 
@@ -237,14 +224,11 @@ impl Generator {
                 }};
                 name = {name};
             }};"##,
-                    name = name,
-                    id = id,
                     kind = target.kind,
                     cargo_file_name = target.cargo_file_name,
                     dep_file_name = Path::new(&target.cargo_file_name).with_extension("d").file_name().unwrap().to_str().unwrap(),
                     xcode_product_name = target.xcode_product_name,
                     supported_platforms = target.supported_platforms,
-                    skip_install_flags = skip_install_flags
                 ),
             }));
 
@@ -261,7 +245,6 @@ impl Generator {
             name = "{xcode_file_name}";
             sourceTree = TARGET_BUILD_DIR;
         }};"##,
-                    prod_id = prod_id,
                     kind = target.kind,
                     xcode_file_name = target.xcode_file_name,
                     file_type = target.file_type
@@ -290,7 +273,7 @@ impl Generator {
         let mut sections = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id, &lipo_script_id);
         let mut groups = vec![];
 
-        let product_refs = sections.product_ids.iter().map(|id| format!("{},\n", id)).collect::<String>();
+        let product_refs = sections.product_ids.iter().map(|id| format!("{id},\n")).collect::<String>();
         let target_refs = sections.targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
         let target_attrs = sections.targets.iter()
             .map(|o| {
@@ -327,7 +310,6 @@ impl Generator {
                     sourceTree = "<group>";
             }};"#,
                 cargo_toml_path = cargo_toml_path.display(),
-                manifest_path_id = manifest_path_id
             ),
         });
 
@@ -364,8 +346,8 @@ impl Generator {
         let filereference = sections.filereference.into_iter().map(|o| o.def).collect::<String>();
         let objects = sections.other.into_iter().map(|o| o.def).collect::<String>();
         let targets = sections.targets.into_iter().map(|o| o.def).collect::<String>();
-        let main_folder_refs = main_folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
-        let frameworks_folder_refs = frameworks_folder_refs.iter().map(|id| format!("{},\n", id)).collect::<String>();
+        let main_folder_refs = main_folder_refs.iter().map(|id| format!("{id},\n")).collect::<String>();
+        let frameworks_folder_refs = frameworks_folder_refs.iter().map(|id| format!("{id},\n")).collect::<String>();
 
         let build_script = r##"
 set -eu; export PATH="$PATH:$HOME/.cargo/bin:/usr/local/bin";
@@ -581,27 +563,7 @@ fi
 }}
     "###,
             crate_version = env!("CARGO_PKG_VERSION"),
-            project_id = project_id,
-            build_rule_id = build_rule_id,
-            lipo_script_id = lipo_script_id,
-            build_script = build_script,
-            main_group_id = main_group_id,
-            prod_group_id = prod_group_id,
-            frameworks_group_id = frameworks_group_id,
-            main_folder_refs = main_folder_refs,
-            frameworks_folder_refs = frameworks_folder_refs,
-            product_refs = product_refs,
-            buildfile = buildfile,
-            filereference = filereference,
             groups = groups.into_iter().map(|g| g.def).collect::<String>(),
-            objects = objects,
-            targets = targets,
-            target_attrs = target_attrs,
-            target_refs = target_refs,
-            conf_list_id = conf_list_id,
-            conf_debug_id = conf_debug_id,
-            conf_release_id = conf_release_id,
-            common_build_settings = common_build_settings
         );
 
         Ok(tpl)
