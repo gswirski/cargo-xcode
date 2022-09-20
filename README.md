@@ -44,6 +44,8 @@ This tool will generate Rust-aware project files for all binaries and C-compatib
 
 You can set features via `CARGO_XCODE_FEATURES` target's Build Setting in Xcode.
 
+If you're building `.dylib` for including in an application bundle, make sure to set `DYLIB_INSTALL_NAME_BASE` in Xcode's settings to `@executable_path/../Frameworks/` or whatever location you're going to copy the library to.
+
 ## Features
 
 It's better than just launching `cargo build` from a script:

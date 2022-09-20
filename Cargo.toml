@@ -9,7 +9,7 @@ license = "MIT"
 name = "cargo-xcode"
 readme = "README.md"
 repository = "https://gitlab.com/kornelski/cargo-xcode"
-version = "1.4.3"
+version = "1.5.0"
 edition = "2021"
 
 [lib]

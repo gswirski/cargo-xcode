@@ -208,6 +208,11 @@ impl Generator {
             } else {
                 ""
             };
+            let dylib_flags = if target.prod_type == DY_LIB_APPLE_PRODUCT_TYPE && self.package.version.major != 1 {
+                format!("DYLIB_COMPATIBILITY_VERSION = \"{}\";", self.package.version.major)
+            } else {
+                String::new()
+            };
 
             other.extend([(conf_release_id, "Release"), (conf_debug_id, "Debug")].iter().map(|(id, name)| XcodeObject {
                 id: id.to_owned(),
@@ -221,6 +226,7 @@ impl Generator {
                     "CARGO_XCODE_CARGO_DEP_FILE_NAME" = "{dep_file_name}";
                     SUPPORTED_PLATFORMS = "{supported_platforms}";
                     {skip_install_flags}
+                    {dylib_flags}
                 }};
                 name = {name};
             }};"##,
@@ -411,10 +417,22 @@ fi
             "CARGO_XCODE_TARGET_OS[sdk=appletvsimulator*]" = "tvos";
             "CARGO_XCODE_TARGET_OS[sdk=appletvos*]" = "tvos";
             PRODUCT_NAME = "{product_name}";
+            MARKETING_VERSION = "{product_version}";
+            CURRENT_PROJECT_VERSION = "{major}.{minor}";
             SDKROOT = macosx;
         "##,
+            major = self.package.version.major,
+            minor = self.package.version.minor,
             product_name = self.package.name, // used as a base for output filename in Xcode
+            product_version = self.package.version.to_string(),
         );
+
+        let lipo_script = r##"
+            set -eux; cat "$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist" | tr '\n' '\0' | xargs -0 lipo -create -output "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+            if [ ${LD_DYLIB_INSTALL_NAME:+1} ]; then
+                install_name_tool -id "$LD_DYLIB_INSTALL_NAME" "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+            fi
+        "##.escape_default();
 
         let tpl = format!(
             r###"// !$*UTF8*$!
@@ -502,7 +520,7 @@ fi
             );
             runOnlyForDeploymentPostprocessing = 0;
             shellPath = /bin/sh;
-            shellScript = "# generated with cargo-xcode {crate_version}\nset -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\"";
+            shellScript = "# generated with cargo-xcode {crate_version}\n{lipo_script}";
         }};
 
         {conf_list_id} = {{
