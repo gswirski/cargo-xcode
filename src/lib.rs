@@ -275,9 +275,7 @@ impl Generator {
         let manifest_path_id = self.make_id("", "Cargo.toml");
 
         let rust_targets = self.project_targets();
-        let has_static = rust_targets.iter().any(|t| t.prod_type == STATIC_LIB_APPLE_PRODUCT_TYPE);
         let mut sections = self.products_pbxproj(&rust_targets, &manifest_path_id, &build_rule_id, &lipo_script_id);
-        let mut groups = vec![];
 
         let product_refs = sections.product_ids.iter().map(|id| format!("{id},\n")).collect::<String>();
         let target_refs = sections.targets.iter().map(|o| format!("{},\n", o.id)).collect::<String>();
@@ -294,7 +292,6 @@ impl Generator {
             })
             .collect::<String>();
         let mut main_folder_refs = Vec::new();
-        let mut frameworks_folder_refs = Vec::new();
 
         main_folder_refs.push(manifest_path_id.clone());
 
@@ -319,32 +316,6 @@ impl Generator {
             ),
         });
 
-        if has_static {
-            sections.filereference.push(XcodeObject {
-                id: "ADDEDBA66A6E1".to_owned(),
-                def: r#"
-                    /* Rust needs libresolv */
-                    ADDEDBA66A6E1 = {
-                        isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition";
-                        name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT;
-                    };
-                "#.to_owned(),
-            });
-            groups.push(XcodeObject {
-                id: "ADDEDBA66A6E2".to_owned(),
-                def: r#"
-                ADDEDBA66A6E2 /* Required for static linking */ = {
-                    isa = PBXGroup;
-                    children = (
-                        ADDEDBA66A6E1
-                    );
-                    name = "Required for static linking";
-                    sourceTree = "<group>";
-                };"#.to_owned(),
-            });
-            frameworks_folder_refs.push("ADDEDBA66A6E2".to_owned());
-        }
-
         main_folder_refs.push(prod_group_id.clone());
         main_folder_refs.push(frameworks_group_id.clone());
 
@@ -353,7 +324,6 @@ impl Generator {
         let objects = sections.other.into_iter().map(|o| o.def).collect::<String>();
         let targets = sections.targets.into_iter().map(|o| o.def).collect::<String>();
         let main_folder_refs = main_folder_refs.iter().map(|id| format!("{id},\n")).collect::<String>();
-        let frameworks_folder_refs = frameworks_folder_refs.iter().map(|id| format!("{id},\n")).collect::<String>();
 
         let build_script = r##"
 set -eu; export PATH="$HOME/.cargo/bin:$PATH:/usr/local/bin";
@@ -472,13 +442,10 @@ fi
         {frameworks_group_id} /* Frameworks */ = {{
             isa = PBXGroup;
             children = (
-                {frameworks_folder_refs}
             );
             name = Frameworks;
             sourceTree = "<group>";
         }};
-
-        {groups}
 
         {prod_group_id} /* Products */ = {{
             isa = PBXGroup;
@@ -581,7 +548,6 @@ fi
 }}
     "###,
             crate_version = env!("CARGO_PKG_VERSION"),
-            groups = groups.into_iter().map(|g| g.def).collect::<String>(),
         );
 
         Ok(tpl)

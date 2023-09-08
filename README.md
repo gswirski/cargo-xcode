@@ -38,8 +38,6 @@ This tool will generate Rust-aware project files for all binaries and C-compatib
 
 5. In your parent project's target's **Build Phases**, in **Link Binary With Libraries** phase, you can now add the Rust libraries from the workspace.
 
-6. If you're linking with *static* Rust libraries, also link your executables/libraries with `libresolv.dylib` (without it Xcode won't find `_res_9_init` required by Rust's stdlib).
-
 ### Advanced usage
 
 You can set features via `CARGO_XCODE_FEATURES` target's Build Setting in Xcode.
