@@ -359,7 +359,8 @@ DEP_FILE_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUI
 if [ -f "$DEP_FILE_SRC" ]; then
     DEP_FILE_DST="${DERIVED_FILE_DIR}/${CARGO_XCODE_TARGET_ARCH}-${EXECUTABLE_NAME}.d"
     cp -f "$DEP_FILE_SRC" "$DEP_FILE_DST"
-    echo >> "$DEP_FILE_DST" "$SCRIPT_OUTPUT_FILE_0: $BUILT_SRC"
+
+    echo >> "$DEP_FILE_DST" "$(echo "$SCRIPT_OUTPUT_FILE_0" | sed 's/ /\\ /g'): $(echo "$BUILT_SRC" | sed 's/ /\\ /g')"
 fi
 
 # lipo script needs to know all the platform-specific files that have been built
