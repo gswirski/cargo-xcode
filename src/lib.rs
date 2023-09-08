@@ -356,7 +356,7 @@ impl Generator {
         let frameworks_folder_refs = frameworks_folder_refs.iter().map(|id| format!("{id},\n")).collect::<String>();
 
         let build_script = r##"
-set -eu; export PATH="$PATH:$HOME/.cargo/bin:/usr/local/bin";
+set -eu; export PATH="$HOME/.cargo/bin:$PATH:/usr/local/bin";
 if [ "${IS_MACCATALYST-NO}" = YES ]; then
     CARGO_XCODE_TARGET_TRIPLE="${CARGO_XCODE_TARGET_ARCH}-apple-ios-macabi"
 else
