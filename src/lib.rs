@@ -329,8 +329,12 @@ impl Generator {
 set -eu; export PATH="$HOME/.cargo/bin:$PATH:/usr/local/bin";
 if [ "${IS_MACCATALYST-NO}" = YES ]; then
     CARGO_XCODE_TARGET_TRIPLE="${CARGO_XCODE_TARGET_ARCH}-apple-ios-macabi"
+    CARGO_XCODE_USE_NIGHTLY="+nightly"
+    CARGO_XCODE_BUILD_FLAGS="-Z build-std=panic_abort,std"
 else
     CARGO_XCODE_TARGET_TRIPLE="${CARGO_XCODE_TARGET_ARCH}-apple-${CARGO_XCODE_TARGET_OS}"
+    CARGO_XCODE_USE_NIGHTLY=""
+    CARGO_XCODE_BUILD_FLAGS=""
 fi
 if [ "$CARGO_XCODE_TARGET_OS" != "darwin" ]; then
     PATH="${PATH/\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/bin:/xcode-provided-ld-cant-link-lSystem-for-the-host-build-script:}"
@@ -342,13 +346,13 @@ fi
 if command -v rustup &> /dev/null; then
     if ! rustup target list --installed | egrep -q "${CARGO_XCODE_TARGET_TRIPLE}"; then
         echo "warning: this build requires rustup toolchain for $CARGO_XCODE_TARGET_TRIPLE, but it isn't installed"
-        rustup target add "${CARGO_XCODE_TARGET_TRIPLE}" || echo >&2 "warning: can't install $CARGO_XCODE_TARGET_TRIPLE"
+        # rustup target add "${CARGO_XCODE_TARGET_TRIPLE}" || echo >&2 "warning: can't install $CARGO_XCODE_TARGET_TRIPLE"
     fi
 fi
 if [ "$ACTION" = clean ]; then
- ( set -x; cargo clean --manifest-path="$SCRIPT_INPUT_FILE" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"; );
+ ( set -x; cargo $CARGO_XCODE_USE_NIGHTLY clean $CARGO_XCODE_BUILD_FLAGS --manifest-path="$SCRIPT_INPUT_FILE" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"; );
 else
- ( set -x; cargo build --manifest-path="$SCRIPT_INPUT_FILE" --features="${CARGO_XCODE_FEATURES:-}" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"; );
+ ( set -x; cargo $CARGO_XCODE_USE_NIGHTLY build $CARGO_XCODE_BUILD_FLAGS --manifest-path="$SCRIPT_INPUT_FILE" --features="${CARGO_XCODE_FEATURES:-}" ${OTHER_INPUT_FILE_FLAGS} --target="${CARGO_XCODE_TARGET_TRIPLE}"; );
 fi
 # it's too hard to explain Cargo's actual exe path to Xcode build graph, so hardlink to a known-good path instead
 BUILT_SRC="${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}"
